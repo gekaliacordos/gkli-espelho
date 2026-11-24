@@ -2,6 +2,10 @@ name: Captar HFlex
 on:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      codigos:
+        type: string
+        default: ''
     secrets:
       AGENTE_HFLEX_USUARIO:
         required: true
@@ -33,12 +37,13 @@ jobs:
       - id: preparar_chrome
         run: npx playwright install --with-deps chrome
       - name: Captar Escritório Rio Negro
+        if: inputs.codigos == '' || contains(format(',{0},', inputs.codigos), ',hflex,')
         run: npm run captar:hflex -- hflex
         env: &hflex-env
           ESPELHO_PORTAL_USUARIO: ${{ secrets.AGENTE_HFLEX_USUARIO }}
           ESPELHO_PORTAL_SENHA: ${{ secrets.AGENTE_HFLEX_SENHA }}
           ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_HFLEX_DATABASE_URL }}
       - name: Captar Office Tamboré
-        if: ${{ !cancelled() && steps.preparar_chrome.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.preparar_chrome.outcome == 'success' && (inputs.codigos == '' || contains(format(',{0},', inputs.codigos), ',hflex-5987,')) }}
         run: npm run captar:hflex -- hflex-5987
         env: *hflex-env

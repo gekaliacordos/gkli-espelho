@@ -115,6 +115,7 @@
         </div>
       </section>
       <section id="captacao-area" aria-label="Captação" tabindex="-1" hidden>
+        <div id="espelhamento-geral"></div>
         <div id="result" aria-live="polite"></div>
       </section>
       <section id="relatorios-area" aria-label="Relatórios" tabindex="-1" hidden>
@@ -141,6 +142,7 @@
     const status = document.querySelector("#status");
     const statusSessao = document.querySelector("#status-sessao");
     const result = document.querySelector("#result");
+    const espelhamentoGeral = document.querySelector("#espelhamento-geral");
     const catalog = document.querySelector("#catalog");
     const relatorios = document.querySelector("#relatorios");
     const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -308,7 +310,66 @@
       return administradoras.map(administradora => [administradora.chave, administradora.nome_operacional]);
     }
 
-    function painelAdministradoras(administradoras) {
+    function controleEspelhamento(token, escopo, chave, ativo, explicacao, atualizar) {
+      const controle = document.createElement("div");
+      controle.className = "espelhamento-controle";
+      const botao = document.createElement("button");
+      botao.type = "button";
+      botao.className = "espelhamento-chave";
+      botao.setAttribute("role", "switch");
+      botao.setAttribute("aria-label", "Espelhamento automático " + (escopo === "geral" ? "geral" : "deste cadastro"));
+      const texto = document.createElement("span");
+      texto.className = "espelhamento-explicacao";
+      texto.textContent = explicacao;
+      const retorno = document.createElement("span");
+      retorno.setAttribute("role", "status");
+      const mostrar = () => {
+        botao.setAttribute("aria-checked", String(ativo));
+        botao.textContent = "Espelhamento automático " + (ativo ? "ligado" : "desligado");
+      };
+      mostrar();
+      botao.addEventListener("click", async () => {
+        botao.disabled = true;
+        retorno.textContent = "Salvando…";
+        try {
+          const response = await fetch(new URL("/rest/v1/rpc/configurar_espelhamento", authUrl), {
+            method: "POST",
+            headers: { apikey: apiKey, Authorization: "Bearer " + token, "Content-Type": "application/json" },
+            body: JSON.stringify({ escopo, chave, ativo: !ativo }),
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!response.ok) throw new Error("Não foi possível salvar.");
+          const salvo = await response.json();
+          if (typeof salvo !== "boolean") throw new Error("Estado inválido.");
+          if (token !== accessToken) return;
+          ativo = salvo;
+          atualizar?.(ativo);
+          mostrar();
+          retorno.textContent = "Configuração salva.";
+        } catch {
+          retorno.textContent = "Não foi possível salvar.";
+        } finally {
+          botao.disabled = false;
+        }
+      });
+      controle.append(botao, texto, retorno);
+      return controle;
+    }
+
+    async function mostrarEspelhamentoGeral(token) {
+      espelhamentoGeral.textContent = "Consultando o agendamento…";
+      try {
+        const [configuracao] = await consultarEspelho(token, "espelhamento_configuracao", { select: "ativo", limit: "1" });
+        if (token !== accessToken) return;
+        if (typeof configuracao?.ativo !== "boolean") throw new Error("Configuração indisponível.");
+        espelhamentoGeral.replaceChildren(controleEspelhamento(token, "geral", null, configuracao.ativo,
+          "O GitHub verifica a agenda diariamente às 6h23, horário de Brasília. A coleta pode rodar a partir do dia seguinte ao vencimento, com as três chaves ligadas."));
+      } catch {
+        if (token === accessToken) espelhamentoGeral.textContent = "Não foi possível consultar o agendamento.";
+      }
+    }
+
+    function painelAdministradoras(administradoras, token) {
       const painel = document.createElement("details");
       const titulo = document.createElement("summary");
       titulo.textContent = "Cadastro de administradoras (" + administradoras.length + ")";
@@ -341,7 +402,10 @@
           detalhe.textContent = valor;
           campos.append(termo, detalhe);
         }
-        ficha.corpo.replaceChildren(campos);
+        ficha.corpo.replaceChildren(controleEspelhamento(token, "administradora", administradora.chave,
+          administradora.espelhamento_automatico,
+          "Pausa ou libera a captação automática dos condomínios vinculados a esta administradora.",
+          ativo => { administradora.espelhamento_automatico = ativo; }), campos);
       });
       return painel;
     }
@@ -815,7 +879,8 @@
       destino.replaceChildren(cabecalho, ...antes, grade);
     }
 
-    function fichaCondominio({ id, nome, status, cadastro, condominio_acessos: acesso }, token) {
+    function fichaCondominio(registro, token) {
+      const { id, nome, status, cadastro, condominio_acessos: acesso, espelhamento_alvos: alvos } = registro;
       const ficha = document.createElement("details");
       ficha.open = true;
       ficha.className = "catalog-ficha";
@@ -832,7 +897,14 @@
         valor.textContent = cadastro[chave] == null || cadastro[chave] === "" ? "—" : cadastro[chave];
         campos.append(termo, valor);
       }
-      ficha.append(resumo, montarAcesso(id, acesso, ficha, token), campos);
+      const dia = Number(cadastro.vencimento_cota_dia);
+      const mensagem = status !== "ativo" ? "Cadastro inativo. Fora da agenda."
+        : !alvos?.length ? "Sem vínculo de captação automática neste cadastro."
+        : Number.isInteger(dia) && dia >= 1 && dia <= 31 ? "Vencimento da cota no dia " + dia + "."
+        : "Informe o dia de vencimento no cadastro para entrar na agenda.";
+      ficha.append(resumo, controleEspelhamento(token, "condominio", id,
+        registro.espelhamento_automatico, mensagem, ativo => { registro.espelhamento_automatico = ativo; }),
+        montarAcesso(id, acesso, ficha, token), campos);
       return ficha;
     }
 
@@ -852,7 +924,7 @@
         filtro.id = "catalog-filter";
         const contagem = document.createElement("p");
         contagem.setAttribute("role", "status");
-        montarColunas(catalog, "Cadastro de condomínios", "colunas-cadastro", [adm, condominio, ficha], [painelAdministradoras(administradoras), rotulo, filtro, contagem]);
+        montarColunas(catalog, "Cadastro de condomínios", "colunas-cadastro", [adm, condominio, ficha], [painelAdministradoras(administradoras, token), rotulo, filtro, contagem]);
 
         const normalizar = texto => texto.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
         const nomeAdministradora = new Map(opcoesAdministradoras(administradoras));
@@ -1183,15 +1255,16 @@
         signedIn.hidden = false;
         exit.focus();
         const administradoras = consultarEspelho(accessToken, "administradoras", {
-          select: "chave,nome,nome_operacional,cadastro", order: "nome_operacional.asc,chave.asc",
+          select: "chave,nome,nome_operacional,cadastro,espelhamento_automatico", order: "nome_operacional.asc,chave.asc",
         });
         const captacoes = consultarEspelho(accessToken, "captacoes_por_administradora", {
           select: "id,codigo_condominio,condominio,administradora,administradora_chave",
           order: "condominio.asc,codigo_condominio.asc,id.asc",
         });
         const cadastro = consultarEspelho(accessToken, "condominios", {
-          select: "id,nome,administradora,administradora_chave,status,cadastro,condominio_acessos(situacao,administradora,portal)", order: "nome.asc,id.asc",
+          select: "id,nome,administradora,administradora_chave,status,cadastro,espelhamento_automatico,espelhamento_alvos(codigo),condominio_acessos(situacao,administradora,portal)", order: "nome.asc,id.asc",
         });
+        void mostrarEspelhamentoGeral(accessToken);
         void mostrarSelecaoCaptacao(accessToken, captacoes, administradoras);
         void mostrarCadastro(accessToken, cadastro, administradoras);
         void mostrarRelatorios(accessToken, captacoes, administradoras, cadastro);

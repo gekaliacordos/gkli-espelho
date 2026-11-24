@@ -1,5 +1,7 @@
 name: Captar administradoras
 on:
+  schedule:
+    - cron: "23 9 * * *"
   workflow_dispatch:
     inputs:
       administradora:
@@ -17,6 +19,10 @@ on:
           - oma
           - atipass
           - villagua
+      prever_agenda:
+        description: Conferir a agenda automática sem abrir os portais
+        type: boolean
+        default: false
       condominio:
         description: Códigos internos opcionais separados por vírgula (exceto no HFlex)
         type: string
@@ -25,24 +31,53 @@ permissions:
   contents: read
 
 concurrency:
-  group: captar-administradoras-${{ inputs.administradora }}
+  group: captar-administradoras-${{ inputs.administradora || github.event_name }}
 
 jobs:
+  planejar:
+    if: github.event_name == 'schedule' || inputs.prever_agenda
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      alvos: ${{ steps.agenda.outputs.alvos }}
+      hflex: ${{ steps.agenda.outputs.hflex }}
+      tem_alvos: ${{ steps.agenda.outputs.tem_alvos }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - id: agenda
+        run: node captacao/planejar.mjs
+        env:
+          ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_COLETORES_DATABASE_URL }}
   hflex:
-    if: inputs.administradora == 'todas' || inputs.administradora == 'hflex'
+    needs: planejar
+    if: >-
+      !cancelled() && !inputs.prever_agenda &&
+      ((github.event_name == 'schedule' && needs.planejar.outputs.hflex != '') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.administradora == 'todas' || inputs.administradora == 'hflex')))
+    with:
+      codigos: ${{ needs.planejar.outputs.hflex }}
     uses: ./.github/workflows/captar-hflex.yml
     secrets:
       AGENTE_HFLEX_USUARIO: ${{ secrets.AGENTE_HFLEX_USUARIO }}
       AGENTE_HFLEX_SENHA: ${{ secrets.AGENTE_HFLEX_SENHA }}
       ESPELHO_HFLEX_DATABASE_URL: ${{ secrets.ESPELHO_HFLEX_DATABASE_URL }}
   captar:
-    if: inputs.administradora != 'hflex'
+    needs: planejar
+    if: >-
+      !cancelled() && !inputs.prever_agenda &&
+      ((github.event_name == 'schedule' && needs.planejar.outputs.tem_alvos == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.administradora != 'hflex'))
     strategy:
       fail-fast: false
       matrix:
-        portal: ${{ fromJSON(inputs.administradora == 'todas' && '["lello","bbz","manager","graiche","habitacional","oma","atipass","villagua"]' || format('["{0}"]', inputs.administradora)) }}
+        alvo: ${{ fromJSON(github.event_name == 'schedule' && (needs.planejar.outputs.alvos || '[]') || (inputs.administradora == 'todas' && '[{"portal":"lello"},{"portal":"bbz"},{"portal":"manager"},{"portal":"graiche"},{"portal":"habitacional"},{"portal":"oma"},{"portal":"atipass"},{"portal":"villagua"}]' || format('[{{"portal":"{0}"}}]', inputs.administradora))) }}
     concurrency:
-      group: captar-portal-${{ matrix.portal }}
+      group: captar-portal-${{ matrix.alvo.portal }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -58,8 +93,8 @@ jobs:
           if [ "$SELECAO" = "todas" ]; then CONDOMINIO=""; fi
           node captacao/executar-nuvem.mjs "$PORTAL" "$CONDOMINIO"
         env:
-          PORTAL: ${{ matrix.portal }}
+          PORTAL: ${{ matrix.alvo.portal }}
           SELECAO: ${{ inputs.administradora }}
-          CONDOMINIO: ${{ inputs.condominio }}
+          CONDOMINIO: ${{ matrix.alvo.codigos || inputs.condominio }}
           ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_COLETORES_DATABASE_URL }}
           ESPELHO_PORTAIS_B64: ${{ secrets.ESPELHO_PORTAIS_V2 }}
