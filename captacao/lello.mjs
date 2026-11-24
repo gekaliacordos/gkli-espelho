@@ -63,7 +63,7 @@ export async function coletarEtapaLello(etapas, etapa, urls, dependencia, progre
   return itens
 }
 
-export async function coletarEspelhoLello({ codigo, nome, usuario, senha }, signal, progresso = () => {}, etapas) {
+export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario, senha }, signal, progresso = () => {}, etapas) {
   if (!/^\d+$/.test(codigo) || !nome || !usuario || !senha) throw Error('Acesso ou alvo da Lello incompleto.')
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
   const fechar = () => { void browser.close().catch(() => {}) }
@@ -93,7 +93,7 @@ export async function coletarEspelhoLello({ codigo, nome, usuario, senha }, sign
       await pagina.waitForFunction(cod => [...document.querySelectorAll('button')].some(b => b.innerText.trim().startsWith(`${cod} -`)), codigo)
     }
     const cabecalho = await botao.innerText()
-    if (!padrao.test(cabecalho) || !normalizar(cabecalho).includes(normalizar(nome))) throw Error('Condomínio do portal diverge do cadastro.')
+    if (!padrao.test(cabecalho) || !normalizar(cabecalho).includes(normalizar(busca))) throw Error('Condomínio do portal diverge do cadastro.')
     await context.route('**/*', route => ['image', 'font', 'media'].includes(route.request().resourceType()) ? route.abort() : route.continue())
 
     async function menu(pathname) {

@@ -14,6 +14,7 @@
     form:not([hidden]) { display: grid; gap: .6rem; }
     input, button { font: inherit; padding: .7rem .85rem; border-radius: .45rem; }
     input { width: 100%; border: 1px solid #8190a4; margin: 0 0 .5rem; }
+    select { display: block; margin: .4rem 0 1rem; max-width: 100%; font: inherit; padding: .5rem; }
     button { border: 0; background: #244a80; color: white; cursor: pointer; }
     button:disabled { opacity: .65; cursor: wait; }
     #status { color: #9b2525; }
@@ -242,11 +243,53 @@
       }
     }
 
-    async function mostrarCaptacao(token) {
-      result.textContent = "Consultando a captação…";
+    async function mostrarSelecaoCaptacao(token) {
+      result.textContent = "Consultando captações…";
+      try {
+        const response = await fetch(new URL("/rest/v1/captacoes_recentes?select=codigo_condominio,condominio&order=condominio.asc", authUrl), {
+          headers: { apikey: apiKey, Authorization: "Bearer " + token },
+          cache: "no-store",
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!response.ok) throw new Error("Consulta indisponível");
+        const captacoes = await response.json();
+        if (token !== accessToken) return;
+        if (!captacoes.length) {
+          result.textContent = "Nenhuma captação disponível para esta conta.";
+          return;
+        }
+        const titulo = document.createElement("h2");
+        titulo.textContent = "Captações Lello";
+        const label = document.createElement("label");
+        label.htmlFor = "capture-select";
+        label.textContent = "Condomínio captado";
+        const seletor = document.createElement("select");
+        seletor.id = "capture-select";
+        for (const captacao of captacoes) {
+          const opcao = document.createElement("option");
+          opcao.value = captacao.codigo_condominio;
+          opcao.textContent = captacao.condominio;
+          seletor.append(opcao);
+        }
+        if (captacoes.some(captacao => captacao.codigo_condominio === "63004")) seletor.value = "63004";
+        const painel = document.createElement("div");
+        result.replaceChildren(titulo, label, seletor, painel);
+        const mostrar = () => {
+          const codigo = seletor.value;
+          void mostrarCaptacao(token, codigo, painel, () => seletor.value === codigo);
+        };
+        seletor.addEventListener("change", mostrar);
+        mostrar();
+      } catch {
+        if (token === accessToken) result.textContent = "Não foi possível consultar as captações.";
+      }
+    }
+
+    async function mostrarCaptacao(token, codigo, painel, continuaSelecionado) {
+      painel.textContent = "Consultando a captação…";
       try {
         const query = new URLSearchParams({
-          select: "condominio,captado_em,dados", order: "captado_em.desc", limit: "1",
+          select: "condominio,captado_em,dados", codigo_condominio: "eq." + codigo, order: "captado_em.desc", limit: "1",
         });
         const response = await fetch(new URL("/rest/v1/captacoes?" + query, authUrl), {
           headers: { apikey: apiKey, Authorization: "Bearer " + token },
@@ -255,13 +298,13 @@
         });
         if (!response.ok) throw new Error("Consulta indisponível");
         const [captacao] = await response.json();
-        if (token !== accessToken) return;
+        if (token !== accessToken || !continuaSelecionado()) return;
         if (!captacao) {
-          result.textContent = "Nenhuma captação disponível para esta conta.";
+          painel.textContent = "Nenhuma captação disponível para esta conta.";
           return;
         }
         const { condominio, captado_em, dados } = captacao;
-        result.textContent = "";
+        painel.textContent = "";
         const titulo = document.createElement("h2");
         titulo.textContent = "Lello · " + condominio;
         const data = document.createElement("p");
@@ -273,7 +316,7 @@
         filtro.id = "unit-filter";
         filtro.type = "search";
         const listas = document.createElement("div");
-        result.append(titulo, data, rotulo, filtro, listas);
+        painel.append(titulo, data, rotulo, filtro, listas);
 
         function mostrarListas() {
           const busca = filtro.value.trim().toUpperCase();
@@ -295,7 +338,7 @@
         filtro.addEventListener("input", mostrarListas);
         mostrarListas();
       } catch {
-        if (token === accessToken) result.textContent = "Não foi possível consultar a captação.";
+        if (token === accessToken && continuaSelecionado()) painel.textContent = "Não foi possível consultar a captação.";
       }
     }
 
@@ -324,7 +367,7 @@
         login.hidden = true;
         signedIn.hidden = false;
         exit.focus();
-        void mostrarCaptacao(accessToken);
+        void mostrarSelecaoCaptacao(accessToken);
         void mostrarCadastro(accessToken);
       } catch {
         status.textContent = "Não foi possível conectar. Tente novamente.";
