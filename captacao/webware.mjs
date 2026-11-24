@@ -8,7 +8,7 @@ export const configuracoesWebware = {
   villagua: { nome: 'Square Guarulhos', adm: 'Villágua', identidade: /SQUARE GUARULHOS/i, relatorio: 'SQUARE GUARULHOS',
     url: 'https://servc9-1.webware.com.br/bin/administradora/default.asp', hosts: ['servc9-1.webware.com.br'] },
   sell: { nome: 'Parc Exclusif Perdizes', adm: 'Sell', identidade: /^EDIFICIO PARC EXCLUSIF PERDIZES$/i, relatorio: 'PARC EXCLUSIF PERDIZES',
-    url: 'https://selladm.com.br/', hosts: ['servc9.webware.com.br', 'servc9-1.webware.com.br'] },
+    url: 'https://selladm.com.br/', hosts: ['servc9.webware.com.br', 'servc9-1.webware.com.br'], loginHosts: ['www.selladm.com.br'] },
 }
 
 function menuCotas(page) {
@@ -43,7 +43,7 @@ export async function coletarWebware(portal, { usuario, senha }) {
       page = await abrir || page
     }
     const login = new URL(page.url())
-    if (login.protocol !== 'https:' || ![new URL(config.url).hostname, ...config.hosts].includes(login.hostname)) {
+    if (login.protocol !== 'https:' || ![new URL(config.url).hostname, ...config.hosts, ...(config.loginHosts ?? [])].includes(login.hostname)) {
       throw new Error('Origem do formulário Webware divergente.')
     }
     const senhaInput = page.locator('input[type=password]:visible').first()
@@ -56,35 +56,69 @@ export async function coletarWebware(portal, { usuario, senha }) {
 
     page = await selecionarSessao(context, config)
     const endereco = new URL('/bin/rt/rtPendentes.asp', page.url())
-    const href = await menuCotas(page).getAttribute('href')
+    const linkCotas = portal === 'sell'
+      ? page.getByRole('link', { name: /^cotas\s+pendentes$/i }).first()
+      : menuCotas(page)
+    const href = await linkCotas.getAttribute('href')
     if (href) {
       const link = new URL(href, page.url())
       if (link.origin === endereco.origin && link.pathname === endereco.pathname) endereco.search = link.search
     }
-    await page.goto(endereco.href, { waitUntil: 'domcontentloaded' })
+    let retornoSell = false
+    if (portal === 'sell') {
+      if (!href || new URL(href, page.url()).href !== endereco.href) {
+        throw new Error('Link autenticado de Cotas Pendentes não confirmado.')
+      }
+      const consulta = page.waitForResponse(resposta => {
+        const url = new URL(resposta.url())
+        return url.origin === endereco.origin && url.pathname === endereco.pathname
+      }, { timeout: 15_000 })
+      consulta.catch(() => {})
+      await linkCotas.click()
+      const resposta = await consulta
+      retornoSell = resposta.status() === 302
+        && resposta.headers().location?.split('?')[0] === '/bin/skin/aInicioSkin.asp'
+      await page.waitForLoadState('domcontentloaded')
+    } else {
+      await page.goto(endereco.href, { waitUntil: 'domcontentloaded' })
+    }
     const atual = new URL(page.url())
     if (atual.origin !== endereco.origin || !config.identidade.test((await page.title()).trim())) {
       throw new Error('A consulta de cotas saiu do condomínio confirmado.')
     }
     const filtro = page.locator('select').first()
-    if (portal === 'sell' && !await filtro.count() && atual.pathname === '/bin/skin/aInicioSkin.asp'
+    if (portal === 'sell' && retornoSell && !await filtro.count() && atual.pathname === '/bin/skin/aInicioSkin.asp'
       && await menuCotas(page).isVisible()) {
       return {
         unidades: [], contatos: [], cotas: [], acordos: [],
-        cobertura: 'O portal retornou ao menu de cotas após a consulta. Não gerou relatório; a ausência de cotas em aberto ainda requer confirmação.',
-        cotasVerificadas: false,
+        cobertura: 'A consulta de Cotas Pendentes retornou ao menu do condomínio, comportamento da Sell para ausência de cotas abertas. Cadastro integral, responsáveis e acordos ainda não foram conferidos.',
       }
     }
 
-    const todas = await filtro.locator('option').filter({ hasText: /todas(?: as)? unidades/i }).getAttribute('value')
-    if (todas === null) throw new Error('Filtro de todas as unidades indisponível.')
+    const opcoes = await filtro.locator('option').evaluateAll(itens =>
+      itens.map(item => ({ valor: item.value, rotulo: item.textContent.trim() })))
+    const todas = opcoes.find(item => /^todas(?: as)? unidades$/i.test(item.rotulo))?.valor
+    if (!todas) throw new Error('Filtro de todas as unidades indisponível.')
+    const referencias = opcoes.filter(item => item.valor && item.valor !== todas).map(item => item.valor)
+    const unidadesNoFiltro = referencias.map(referencia => {
+      const partes = referencia.match(/^([a-z0-9-]+)\/[a-z0-9-]+\/([a-z0-9-]+)$/i)
+      return partes ? partes[1] + '/' + partes[2] : null
+    })
     await filtro.selectOption(todas)
     await page.getByRole('button', { name: /consultar|avançar/i }).or(page.getByText(/^Consultar$/i)).first().click()
     const download = page.waitForEvent('download', { timeout: 60_000 })
     download.catch(() => {})
     await page.getByText(/exportar excel/i).or(page.getByRole('button', { name: /exportar excel/i })).first().click()
     const arquivo = await (await download).path()
-    return lerInadimplenciaCondoPro(await readFile(arquivo), config.relatorio)
+    const dados = lerInadimplenciaCondoPro(await readFile(arquivo), config.relatorio)
+    const identificadores = new Set(unidadesNoFiltro)
+    if (!identificadores.has(null) && identificadores.size === referencias.length
+      && dados.unidades.every(unidade => identificadores.has(unidade))) {
+      dados.unidades = [...identificadores]
+      dados.unidadesDoFiltro = true
+      dados.cobertura = 'Unidades listadas no filtro do portal e cotas em aberto conferidas. Responsáveis e acordos ainda não foram conferidos.'
+    }
+    return dados
   } finally {
     await browser.close()
   }

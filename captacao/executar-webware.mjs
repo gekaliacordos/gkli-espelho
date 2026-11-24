@@ -12,22 +12,18 @@ if (!config) {
       usuario: process.env.ESPELHO_PORTAL_USUARIO,
       senha: process.env.ESPELHO_PORTAL_SENHA,
     })
-    if (dados.cotasVerificadas === false) {
-      console.log(config.nome + ' · acesso confirmado; relatório de cotas indisponível.')
-    } else {
-      const banco = await abrirBanco(process.env.ESPELHO_DATABASE_URL)
-      try {
-        await banco.query(`insert into public.captacoes
-          (codigo_condominio, condominio, administradora, captado_em, dados)
-          values ($1, $2, $3, $4, $5)`, [portal, config.nome, config.adm, new Date(), dados])
-      } finally {
-        await banco.end()
-      }
-      console.log(config.nome + ' · captação gravada', {
-        unidades: dados.unidades.length,
-        cotasEmAberto: dados.cotas.length,
-      })
+    const banco = await abrirBanco(process.env.ESPELHO_DATABASE_URL)
+    try {
+      await banco.query(`insert into public.captacoes
+        (codigo_condominio, condominio, administradora, captado_em, dados)
+        values ($1, $2, $3, $4, $5)`, [portal, config.nome, config.adm, new Date(), dados])
+    } finally {
+      await banco.end()
     }
+    console.log(config.nome + ' · captação gravada', {
+      unidades: dados.unidades.length,
+      cotasEmAberto: dados.cotas.length,
+    })
   } catch {
     console.error(config.nome + ' · a captação requer revisão do acesso ou do relatório.')
     process.exitCode = 1

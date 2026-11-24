@@ -328,7 +328,7 @@
           const busca = filtro.value.trim().toUpperCase();
           const corresponde = unidade => unidade.toUpperCase().includes(busca);
           listas.replaceChildren();
-          listar(listas, dados.cobertura ? "Unidades no relatório" : "Unidades identificadas", dados.unidades.filter(corresponde).sort());
+          listar(listas, dados.unidadesDoFiltro ? "Unidades no portal" : dados.cobertura ? "Unidades no relatório" : "Unidades identificadas", dados.unidades.filter(corresponde).sort());
           if (!dados.cobertura || dados.contatos.length) listar(listas, "Responsáveis encontrados", dados.contatos.filter(c => corresponde(c.unidade)).map(c =>
             [c.unidade, c.nome, c.email].filter(Boolean).join(" · ")
           ));
