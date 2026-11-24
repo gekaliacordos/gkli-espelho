@@ -246,7 +246,7 @@
     async function mostrarSelecaoCaptacao(token) {
       result.textContent = "Consultando captações…";
       try {
-        const response = await fetch(new URL("/rest/v1/captacoes_recentes?select=codigo_condominio,condominio&order=condominio.asc", authUrl), {
+        const response = await fetch(new URL("/rest/v1/captacoes_recentes?select=codigo_condominio,condominio,administradora&order=condominio.asc", authUrl), {
           headers: { apikey: apiKey, Authorization: "Bearer " + token },
           cache: "no-store",
           signal: AbortSignal.timeout(15000),
@@ -259,7 +259,7 @@
           return;
         }
         const titulo = document.createElement("h2");
-        titulo.textContent = "Captações Lello";
+        titulo.textContent = "Captações por condomínio";
         const label = document.createElement("label");
         label.htmlFor = "capture-select";
         label.textContent = "Condomínio captado";
@@ -268,7 +268,7 @@
         for (const captacao of captacoes) {
           const opcao = document.createElement("option");
           opcao.value = captacao.codigo_condominio;
-          opcao.textContent = captacao.condominio;
+          opcao.textContent = captacao.condominio + " · " + captacao.administradora;
           seletor.append(opcao);
         }
         if (captacoes.some(captacao => captacao.codigo_condominio === "63004")) seletor.value = "63004";
@@ -289,7 +289,7 @@
       painel.textContent = "Consultando a captação…";
       try {
         const query = new URLSearchParams({
-          select: "condominio,captado_em,dados", codigo_condominio: "eq." + codigo, order: "captado_em.desc", limit: "1",
+          select: "condominio,administradora,captado_em,dados", codigo_condominio: "eq." + codigo, order: "captado_em.desc", limit: "1",
         });
         const response = await fetch(new URL("/rest/v1/captacoes?" + query, authUrl), {
           headers: { apikey: apiKey, Authorization: "Bearer " + token },
@@ -303,10 +303,10 @@
           painel.textContent = "Nenhuma captação disponível para esta conta.";
           return;
         }
-        const { condominio, captado_em, dados } = captacao;
+        const { condominio, administradora, captado_em, dados } = captacao;
         painel.textContent = "";
         const titulo = document.createElement("h2");
-        titulo.textContent = "Lello · " + condominio;
+        titulo.textContent = administradora + " · " + condominio;
         const data = document.createElement("p");
         data.textContent = "Captado em " + dataHora.format(new Date(captado_em));
         const rotulo = document.createElement("label");
@@ -316,20 +316,26 @@
         filtro.id = "unit-filter";
         filtro.type = "search";
         const listas = document.createElement("div");
-        painel.append(titulo, data, rotulo, filtro, listas);
+        painel.append(titulo, data);
+        if (dados.cobertura) {
+          const cobertura = document.createElement("p");
+          cobertura.textContent = dados.cobertura;
+          painel.append(cobertura);
+        }
+        painel.append(rotulo, filtro, listas);
 
         function mostrarListas() {
           const busca = filtro.value.trim().toUpperCase();
           const corresponde = unidade => unidade.toUpperCase().includes(busca);
           listas.replaceChildren();
-          listar(listas, "Unidades identificadas", dados.unidades.filter(corresponde).sort());
-          listar(listas, "Responsáveis encontrados", dados.contatos.filter(c => corresponde(c.unidade)).map(c =>
+          listar(listas, dados.cobertura ? "Unidades no relatório" : "Unidades identificadas", dados.unidades.filter(corresponde).sort());
+          if (!dados.cobertura || dados.contatos.length) listar(listas, "Responsáveis encontrados", dados.contatos.filter(c => corresponde(c.unidade)).map(c =>
             [c.unidade, c.nome, c.email].filter(Boolean).join(" · ")
           ));
           listar(listas, "Cotas em aberto", dados.cotas.filter(c => corresponde(c.unidade)).map(c =>
             [c.unidade, "Recibo " + c.recibo, c.vencimento, moeda.format(c.valores.at(-1) / 100)].join(" · ")
           ));
-          listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => [
+          if (!dados.cobertura || dados.acordos.length) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => [
             a.unidade, "Acordo " + a.numero, a.situacao, a.total == null ? null : moeda.format(a.total / 100),
             a.parcelas.length + " parcelas", a.cotas.length + " cotas vinculadas",
           ].filter(Boolean).join(" · ")));

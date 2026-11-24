@@ -4,7 +4,7 @@ import { Client } from 'pg'
 import { alvosLello } from './alvos-lello.mjs'
 import { coletarEspelhoLello } from './lello.mjs'
 
-async function abrirBanco(url) {
+export async function abrirBanco(url) {
   const destino = new URL(url)
   const direto = destino.hostname === 'db.jrctpldzavctwaqiepul.supabase.co'
   const pooler = destino.hostname === 'aws-1-us-east-1.pooler.supabase.com'
