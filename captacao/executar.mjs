@@ -32,7 +32,7 @@ export async function executarAlvos(alvos, env, log = console.log) {
         const { codigo } = alvo
         etapa = 'consulta'
         const captura = await coletarEspelhoLello({ ...alvo, codigo, ...credenciais },
-          AbortSignal.timeout(25 * 60_000), mensagem => log(alvo.nome + ' · ' + mensagem))
+          AbortSignal.timeout((alvo.codigo === '1637' ? 55 : 25) * 60_000), mensagem => log(alvo.nome + ' · ' + mensagem))
         etapa = 'gravação'
         await banco.query(
           'insert into public.captacoes (codigo_condominio, condominio, captado_em, dados) values ($1, $2, $3, $4)',

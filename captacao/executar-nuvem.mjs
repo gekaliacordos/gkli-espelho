@@ -85,7 +85,9 @@ try {
   const url = process.env.ESPELHO_DATABASE_URL
   if (!url) throw Error('Conexão ausente.')
   if (portal === 'lello') {
-    const alvos = alvosLello.filter(a => !solicitados.size || solicitados.has(a.codigo) || solicitados.has(a.nome))
+    const alvos = solicitados.size
+      ? [...new Set([...solicitados].map(id => alvosLello.find(a => a.codigo === id || a.nome === id)).filter(Boolean))]
+      : alvosLello
     for (const alvo of alvos) {
       vistos.add(alvo.codigo)
       vistos.add(alvo.nome)
