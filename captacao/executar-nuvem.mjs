@@ -7,7 +7,9 @@ import { coletarManager } from './manager.mjs'
 import { coletarHabitacional } from './habitacional.mjs'
 import { coletarOma } from './oma.mjs'
 
-const [portal, alvo] = process.argv.slice(2)
+const [portal, selecao] = process.argv.slice(2)
+const solicitados = new Set(selecao?.split(',').map(alvo => alvo.trim()).filter(Boolean) ?? [])
+const vistos = new Set()
 const nomes = { lello: 'Lello', bbz: 'BBZ', manager: 'Manager', graiche: 'Graiche', habitacional: 'Habitacional', oma: 'OMA',
   atipass: 'Atipass', villagua: 'Villágua' }
 let falhas = 0
@@ -57,7 +59,8 @@ async function gravar(codigo, nome, cotas, acordos) {
 }
 
 async function visitar(codigo, nome, coletar) {
-  if (alvo && codigo !== alvo) return
+  if (solicitados.size && !solicitados.has(codigo)) return
+  vistos.add(codigo)
   visitados++
   const etapa = async (nomeEtapa, fazer) => {
     try {
@@ -82,7 +85,11 @@ try {
   const url = process.env.ESPELHO_DATABASE_URL
   if (!url) throw Error('Conexão ausente.')
   if (portal === 'lello') {
-    const alvos = alvosLello.filter(a => !alvo || a.codigo === alvo || a.nome === alvo)
+    const alvos = alvosLello.filter(a => !solicitados.size || solicitados.has(a.codigo) || solicitados.has(a.nome))
+    for (const alvo of alvos) {
+      vistos.add(alvo.codigo)
+      vistos.add(alvo.nome)
+    }
     if (!alvos.length) throw Error('Alvo ausente.')
     for (const a of alvos) {
       const perfil = credenciais[a.perfil]
@@ -107,6 +114,7 @@ try {
     }
     if (!visitados) throw Error('Alvo ausente.')
   }
+  if ([...solicitados].some(codigo => !vistos.has(codigo))) throw Error('Há códigos fora do escopo.')
 } catch {
   falhas++
   console.error(portal ?? 'portal', 'falha na configuração ou autenticação')

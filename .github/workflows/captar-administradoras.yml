@@ -18,7 +18,7 @@ on:
           - atipass
           - villagua
       condominio:
-        description: Código interno opcional para testar um condomínio (exceto no HFlex)
+        description: Códigos internos opcionais separados por vírgula (exceto no HFlex)
         type: string
 
 permissions:
