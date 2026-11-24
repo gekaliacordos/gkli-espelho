@@ -42,14 +42,14 @@
     .catalog-record { display: grid; gap: .35rem .8rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
     .catalog-record dt { font-weight: 600; overflow-wrap: anywhere; }
     .catalog-record dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
-    main:has(#acordo-area:not([hidden])) { width: min(100%, 76rem); }
+    main:has(#signed-in > section:not([hidden])) { width: min(100%, 76rem); }
     #simulador { margin-top: 1.5rem; }
     #simulacao-form { gap: 1rem; }
     .simulacao-colunas { display: grid; grid-template-columns: 1fr 1.2fr 1fr 1.45fr; gap: .75rem; }
-    .simulacao-coluna, #simulador .simulacao-coluna {
+    .simulacao-coluna {
       display: grid; grid-template-rows: auto 1fr; min-width: 0; margin: 0;
       overflow: hidden; border: 1px solid #d5dce6; border-radius: .7rem; background: #f7f9fc; }
-    .simulacao-coluna > label, #simulacao-cotas-titulo {
+    .simulacao-coluna > label, .coluna-titulo {
       padding: .75rem; border-bottom: 1px solid #d5dce6; font-weight: 650; }
     .simulacao-coluna > select, .simulacao-lista-cotas {
       width: 100%; height: 15rem; margin: 0; border: 0; border-radius: 0;
@@ -57,6 +57,12 @@
     .simulacao-coluna > select:disabled { background: #f7f9fc; color: #526379; }
     .simulacao-coluna option { padding: .4rem; }
     .simulacao-lista-cotas { overflow: auto; }
+    .colunas-cadastro { grid-template-columns: 1fr 1.2fr 2fr; }
+    .coluna-detalhes { padding: .65rem; }
+    .coluna-detalhes p:first-child { margin-top: 0; }
+    .coluna-detalhes .catalog-record { font-size: .8125rem; }
+    .coluna-detalhes button { max-width: 100%; }
+    .colunas-captacao { margin-top: 1rem; }
     #simulador .simulacao-lista-cotas label { padding: .45rem; border-bottom: 1px solid #e6ebf2; }
     .simulacao-lista-cotas label:has(input:checked) { background: #edf3fb; }
     .simulacao-lista-cotas p { padding-inline: .45rem; color: #526379; }
@@ -124,7 +130,7 @@
                 <select id="simulacao-unidade" size="8" required disabled><option>Selecione o condomínio</option></select>
               </div>
               <div id="simulacao-cotas" class="simulacao-coluna" role="group" aria-labelledby="simulacao-cotas-titulo">
-                <span id="simulacao-cotas-titulo">Cotas em aberto</span>
+                <span class="coluna-titulo" id="simulacao-cotas-titulo">Cotas em aberto</span>
                 <div class="simulacao-lista-cotas"><p>Selecione a unidade.</p></div>
               </div>
             </div>
@@ -181,7 +187,13 @@
     let cardAtual;
 
     function mostrarInicio(restaurarFoco = false) {
-      if (cardAtual) document.getElementById(cardAtual.dataset.area).hidden = true;
+      if (cardAtual) {
+        const area = document.getElementById(cardAtual.dataset.area);
+        area.hidden = true;
+        if (area.id === "cadastro-area") {
+          area.querySelectorAll(".catalog-ficha").forEach(ficha => ficha.dispatchEvent(new Event("ocultar-acesso")));
+        }
+      }
       inicio.hidden = false;
       voltarInicio.hidden = true;
       if (restaurarFoco) cardAtual?.focus();
@@ -262,11 +274,14 @@
         dados.className = "access-details";
         dados.setAttribute("role", "status");
         let exibindo = false;
+        let consulta = 0;
         const ocultar = () => {
+          consulta++;
           exibindo = false;
           dados.textContent = "";
           botao.textContent = "Mostrar dados de acesso";
         };
+        ficha.addEventListener("ocultar-acesso", ocultar);
         ficha.addEventListener("toggle", () => { if (!ficha.open) ocultar(); });
         botao.addEventListener("click", async () => {
           if (exibindo) {
@@ -274,6 +289,7 @@
             return;
           }
           botao.disabled = true;
+          const atual = ++consulta;
           dados.textContent = "Consultando…";
           try {
             const params = new URLSearchParams({ select: "credenciais", condominio_id: "eq." + id });
@@ -284,7 +300,7 @@
             });
             if (!response.ok) throw new Error("Consulta indisponível");
             const [registro] = await response.json();
-            if (token !== accessToken || !ficha.open || ficha.hidden) {
+            if (atual !== consulta || token !== accessToken || !ficha.isConnected || !ficha.open || ficha.closest("[hidden]")) {
               ocultar();
               return;
             }
@@ -292,7 +308,7 @@
             exibindo = true;
             botao.textContent = "Ocultar dados de acesso";
           } catch {
-            if (token === accessToken && ficha.open && !ficha.hidden) dados.textContent = "Não foi possível consultar os dados de acesso.";
+            if (atual === consulta && token === accessToken && ficha.isConnected && ficha.open && !ficha.closest("[hidden]")) dados.textContent = "Não foi possível consultar os dados de acesso.";
           } finally {
             botao.disabled = false;
           }
@@ -515,14 +531,72 @@
       gerarSim.disabled = !listaCotas.querySelector("input:checked");
     });
 
+    function colunaConsulta(id, titulo, lista = true) {
+      const coluna = document.createElement("div");
+      coluna.className = "simulacao-coluna";
+      const rotulo = document.createElement(lista ? "label" : "span");
+      rotulo.textContent = titulo;
+      const corpo = document.createElement(lista ? "select" : "div");
+      if (lista) {
+        rotulo.htmlFor = id;
+        corpo.id = id;
+        corpo.size = 8;
+      } else {
+        rotulo.id = id;
+        rotulo.className = "coluna-titulo";
+        corpo.className = "simulacao-lista-cotas coluna-detalhes";
+        coluna.setAttribute("role", "group");
+        coluna.setAttribute("aria-labelledby", id);
+      }
+      coluna.append(rotulo, corpo);
+      return { coluna, corpo };
+    }
+
+    function opcoesConsulta(lista, itens, vazio = "Nenhum resultado") {
+      lista.replaceChildren(...itens.map(([valor, texto]) => new Option(texto, valor)));
+      lista.disabled = !itens.length;
+      if (itens.length) lista.selectedIndex = -1;
+      else lista.append(new Option(vazio, ""));
+    }
+
+    function montarColunas(destino, titulo, classe, partes, antes = []) {
+      const cabecalho = document.createElement("h2");
+      cabecalho.textContent = titulo;
+      const grade = document.createElement("div");
+      grade.className = "simulacao-colunas " + classe;
+      grade.append(...partes.map(parte => parte.coluna));
+      destino.replaceChildren(cabecalho, ...antes, grade);
+    }
+
+    function fichaCondominio({ id, nome, status, cadastro, condominio_acessos: acesso }, token) {
+      const ficha = document.createElement("details");
+      ficha.open = true;
+      ficha.className = "catalog-ficha";
+      const resumo = document.createElement("summary");
+      resumo.textContent = [nome, status].filter(Boolean).join(" · ");
+      const campos = document.createElement("dl");
+      campos.className = "catalog-record";
+      const principais = ["nome", "nome_operacional", "cnpj", "administradora", "status"];
+      const chaves = [...principais, ...Object.keys(cadastro).filter(chave => !principais.includes(chave)).sort()];
+      for (const chave of chaves) {
+        const termo = document.createElement("dt");
+        termo.textContent = chave === "cnpj" ? "CNPJ" : chave.replaceAll("_", " ");
+        const valor = document.createElement("dd");
+        valor.textContent = cadastro[chave] == null || cadastro[chave] === "" ? "—" : cadastro[chave];
+        campos.append(termo, valor);
+      }
+      ficha.append(resumo, montarAcesso(id, acesso, ficha, token), campos);
+      return ficha;
+    }
+
     async function mostrarCadastro(token, consulta) {
       catalog.textContent = "Consultando o cadastro de condomínios…";
       try {
         const registros = await consulta;
         if (token !== accessToken) return;
-
-        const titulo = document.createElement("h2");
-        titulo.textContent = "Cadastro de condomínios";
+        const adm = colunaConsulta("catalog-adm", "Administradora");
+        const condominio = colunaConsulta("catalog-condominio", "Condomínio");
+        const ficha = colunaConsulta("catalog-ficha", "Ficha do condomínio", false);
         const rotulo = document.createElement("label");
         rotulo.htmlFor = "catalog-filter";
         rotulo.textContent = "Buscar por nome, CNPJ, administradora ou status";
@@ -531,50 +605,42 @@
         filtro.id = "catalog-filter";
         const contagem = document.createElement("p");
         contagem.setAttribute("role", "status");
-        const lista = document.createElement("div");
-        catalog.replaceChildren(titulo, rotulo, filtro, contagem, lista);
+        montarColunas(catalog, "Cadastro de condomínios", "colunas-cadastro", [adm, condominio, ficha], [rotulo, filtro, contagem]);
 
         const normalizar = texto => texto.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
-        for (const { id, nome, administradora, status, cadastro, condominio_acessos: acesso } of registros) {
-          const ficha = document.createElement("details");
-          const resumo = document.createElement("summary");
-          resumo.textContent = [nome, administradora, status, rotulosAcesso[acesso?.situacao] ?? "Não verificado"].filter(Boolean).join(" · ");
-          ficha.append(resumo);
-          ficha.addEventListener("toggle", () => {
-            if (!ficha.open || ficha.querySelector("dl")) return;
-            const campos = document.createElement("dl");
-            campos.className = "catalog-record";
-            const principais = ["nome", "nome_operacional", "cnpj", "administradora", "status"];
-            const chaves = [...principais, ...Object.keys(cadastro).filter(chave => !principais.includes(chave)).sort()];
-            for (const chave of chaves) {
-              const termo = document.createElement("dt");
-              termo.textContent = chave === "cnpj" ? "CNPJ" : chave.replaceAll("_", " ");
-              const valor = document.createElement("dd");
-              valor.textContent = cadastro[chave] || "—";
-              campos.append(termo, valor);
-            }
-            ficha.append(montarAcesso(id, acesso, ficha, token), campos);
-          });
-          const cnpj = cadastro.cnpj ?? "";
-          ficha.dataset.status = normalizar(status ?? "");
-
-          ficha.dataset.busca = normalizar([nome, cadastro.nome_operacional, administradora, cnpj, cnpj.replace(/\D/g, ""), status].join(" "));
-          lista.append(ficha);
-        }
+        const administradora = registro => registro.administradora || registro.condominio_acessos?.administradora || "Sem administradora";
+        const ordem = (a, b) => a.localeCompare(b, "pt-BR", { numeric: true });
+        const porId = new Map(registros.map(registro => [registro.id, registro]));
+        opcoesConsulta(adm.corpo, [
+          ["todos", "Todas as administradoras"],
+          ...[...new Set(registros.map(administradora))].sort(ordem).map(nome => ["adm:" + nome, nome]),
+        ]);
+        adm.corpo.value = "todos";
 
         function filtrarCadastro() {
           const busca = normalizar(filtro.value);
-          let total = 0;
-          for (const ficha of lista.children) {
-            ficha.hidden = ["ativo", "inativo"].includes(busca)
-              ? ficha.dataset.status !== busca
-              : !ficha.dataset.busca.includes(busca);
-            if (ficha.hidden) ficha.open = false;
-            else total++;
+          const selecionado = condominio.corpo.value;
+          const filtrados = registros.filter(registro => {
+            if (adm.corpo.value !== "todos" && adm.corpo.value !== "adm:" + administradora(registro)) return false;
+            const { nome, status, cadastro } = registro;
+            if (["ativo", "inativo"].includes(busca)) return normalizar(status ?? "") === busca;
+            const cnpj = String(cadastro.cnpj ?? "");
+            return normalizar([nome, cadastro.nome_operacional, administradora(registro), cnpj, cnpj.replace(/\D/g, ""), status].join(" ")).includes(busca);
+          });
+          opcoesConsulta(condominio.corpo, filtrados.map(registro => [registro.id, registro.nome]));
+          if (selecionado && filtrados.some(registro => registro.id === selecionado)) {
+            condominio.corpo.value = selecionado;
+          } else {
+            ficha.corpo.textContent = "Selecione o condomínio.";
           }
-          contagem.textContent = total + " de " + registros.length + " condomínios";
+          contagem.textContent = filtrados.length + " de " + registros.length + " condomínios";
         }
 
+        condominio.corpo.addEventListener("change", () => {
+          const registro = porId.get(condominio.corpo.value);
+          if (registro) ficha.corpo.replaceChildren(fichaCondominio(registro, token));
+        });
+        adm.corpo.addEventListener("change", filtrarCadastro);
         filtro.addEventListener("input", filtrarCadastro);
         filtrarCadastro();
       } catch {
@@ -591,96 +657,95 @@
           result.textContent = "Nenhuma captação disponível para esta conta.";
           return;
         }
-        const titulo = document.createElement("h2");
-        titulo.textContent = "Captações por condomínio";
-        const label = document.createElement("label");
-        label.htmlFor = "capture-select";
-        label.textContent = "Condomínio captado";
-        const seletor = document.createElement("select");
-        seletor.id = "capture-select";
-        for (const captacao of captacoes) {
-          const opcao = document.createElement("option");
-          opcao.value = captacao.codigo_condominio;
-          opcao.textContent = captacao.condominio + " · " + captacao.administradora;
-          seletor.append(opcao);
-        }
-        if (captacoes.some(captacao => captacao.codigo_condominio === "63004")) seletor.value = "63004";
-        const painel = document.createElement("div");
-        result.replaceChildren(titulo, label, seletor, painel);
-        const mostrar = () => {
-          const codigo = seletor.value;
-          void mostrarCaptacao(token, codigo, painel, () => seletor.value === codigo);
+        const adm = colunaConsulta("captacao-adm", "Administradora");
+        const condominio = colunaConsulta("capture-select", "Condomínio");
+        const unidade = colunaConsulta("captacao-unidade", "Unidade");
+        const detalhes = colunaConsulta("captacao-detalhes", "Dados captados", false);
+        const status = document.createElement("div");
+        status.setAttribute("role", "status");
+        montarColunas(result, "Captações por condomínio", "colunas-captacao", [adm, condominio, unidade, detalhes], [status]);
+        const administradoras = [...new Set(captacoes.map(item => item.administradora).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+        opcoesConsulta(adm.corpo, administradoras.map(nome => [nome, nome]));
+        let pedido = 0;
+        let dados;
+        const limpar = () => {
+          dados = undefined;
+          opcoesConsulta(unidade.corpo, [], "Selecione o condomínio");
+          detalhes.corpo.textContent = "Selecione o condomínio para consultar a captação.";
+          status.replaceChildren();
         };
-        seletor.addEventListener("change", mostrar);
-        mostrar();
+        adm.corpo.addEventListener("change", () => {
+          pedido++;
+          limpar();
+          opcoesConsulta(condominio.corpo, captacoes.filter(item => item.administradora === adm.corpo.value)
+            .map(item => [item.codigo_condominio, item.condominio]));
+        });
+        condominio.corpo.addEventListener("change", async () => {
+          limpar();
+          const atual = ++pedido;
+          const codigo = condominio.corpo.value;
+          if (!codigo) return;
+          status.textContent = "Consultando a captação…";
+          try {
+            const [captacao] = await consultarCaptacao(token, codigo, adm.corpo.value);
+            if (token !== accessToken || atual !== pedido) return;
+            if (!captacao) {
+              status.textContent = "Nenhuma captação disponível para este condomínio.";
+              return;
+            }
+            dados = captacao.dados;
+            const unidadeIds = [...new Set([
+              ...dados.unidades, ...dados.cotas.map(cota => cota.unidade),
+              ...dados.acordos.map(acordo => acordo.unidade), ...dados.contatos.map(contato => contato.unidade),
+            ].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+            opcoesConsulta(unidade.corpo, [["todas", "Todas as unidades"], ...unidadeIds.map(id => ["unidade:" + id, id])]);
+            unidade.corpo.value = "todas";
+            const resumo = document.createElement("p");
+            resumo.textContent = [
+              "Captado em " + dataHora.format(new Date(captacao.captado_em)),
+              dados.acordosCaptadosEm ? "Acordos captados em " + dataHora.format(new Date(dados.acordosCaptadosEm)) : null,
+            ].filter(Boolean).join(" · ");
+            status.replaceChildren(resumo);
+            if (dados.cobertura) {
+              const cobertura = document.createElement("p");
+              cobertura.textContent = dados.cobertura;
+              status.append(cobertura);
+            }
+            mostrarListasCaptacao(dados, unidade.corpo.value, detalhes.corpo);
+          } catch {
+            if (token === accessToken && atual === pedido) {
+              status.textContent = "Não foi possível consultar a captação.";
+              condominio.corpo.selectedIndex = -1;
+            }
+          }
+        });
+        unidade.corpo.addEventListener("change", () => mostrarListasCaptacao(dados, unidade.corpo.value, detalhes.corpo));
+        opcoesConsulta(condominio.corpo, [], "Selecione a administradora");
+        limpar();
       } catch {
         if (token === accessToken) result.textContent = "Não foi possível consultar as captações.";
       }
     }
 
-    async function mostrarCaptacao(token, codigo, painel, continuaSelecionado) {
-      painel.textContent = "Consultando a captação…";
-      try {
-        const [captacao] = await consultarCaptacao(token, codigo);
-        if (token !== accessToken || !continuaSelecionado()) return;
-        if (!captacao) {
-          painel.textContent = "Nenhuma captação disponível para esta conta.";
-          return;
-        }
-        const { condominio, administradora, captado_em, dados } = captacao;
-        painel.textContent = "";
-        const titulo = document.createElement("h2");
-        titulo.textContent = administradora + " · " + condominio;
-        const data = document.createElement("p");
-        data.textContent = "Captado em " + dataHora.format(new Date(captado_em));
-        const rotulo = document.createElement("label");
-        rotulo.htmlFor = "unit-filter";
-        rotulo.textContent = "Filtrar por unidade";
-        const filtro = document.createElement("input");
-        filtro.id = "unit-filter";
-        filtro.type = "search";
-        const listas = document.createElement("div");
-        painel.append(titulo, data);
-        if (dados.cobertura) {
-          const cobertura = document.createElement("p");
-          cobertura.textContent = dados.cobertura;
-          painel.append(cobertura);
-        }
-        if (dados.acordosCaptadosEm) {
-          const atualizacao = document.createElement("p");
-          atualizacao.textContent = "Acordos captados em " + dataHora.format(new Date(dados.acordosCaptadosEm));
-          painel.append(atualizacao);
-        }
-        painel.append(rotulo, filtro, listas);
-
-        function mostrarListas() {
-          const busca = filtro.value.trim().toUpperCase();
-          const corresponde = unidade => unidade.toUpperCase().includes(busca);
-          listas.replaceChildren();
-          listar(listas, dados.unidadesDoFiltro ? "Unidades no portal" : dados.cobertura ? "Unidades no relatório" : "Unidades identificadas", dados.unidades.filter(corresponde).sort());
-          if (!dados.cobertura || dados.contatos.length) listar(listas, "Responsáveis encontrados", dados.contatos.filter(c => corresponde(c.unidade)).map(c =>
-            [c.unidade, c.nome, c.email].filter(Boolean).join(" · ")
-          ));
-          const tituloCotas = dados.cotasEmAcordoNoRelatorio ? "Recibos no relatório de devedores" : "Cotas em aberto";
-          const situacoesAcordos = new Map(dados.acordos.map(a => [a.numero, a.situacao]));
-          listar(listas, tituloCotas, dados.cotas.filter(c => corresponde(c.unidade)).map(c => [
-            c.unidade, "Recibo " + c.recibo, c.vencimento, moeda.format(c.valores.at(-1) / 100),
-            c.acordoOrigem ? "Acordo " + c.acordoOrigem : null, situacoesAcordos.get(c.acordoOrigem),
-          ].filter(Boolean).join(" · ")));
-          if (!dados.cobertura || dados.acordosCaptadosEm) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => [
-            a.unidade, "Acordo " + a.numero, a.situacao, a.total == null ? null : moeda.format(a.total / 100),
-            a.parcelas ? a.parcelas.length + " parcelas" : null, a.cotas ? a.cotas.length + " cotas vinculadas" : null,
-            a.saldo == null ? null : "Saldo " + moeda.format(a.saldo / 100),
-            a.periodoNegociado ? "Período negociado " + dataCurta(a.periodoNegociado.inicio) + " a " + dataCurta(a.periodoNegociado.fim) : null,
-            a.cotasAbertasNoPeriodo?.length ? "Recibos em aberto no período (a conferir) " + a.cotasAbertasNoPeriodo.map(cota => cota.recibo).join(", ") : null,
-          ].filter(Boolean).join(" · ")));
-        }
-
-        filtro.addEventListener("input", mostrarListas);
-        mostrarListas();
-      } catch {
-        if (token === accessToken && continuaSelecionado()) painel.textContent = "Não foi possível consultar a captação.";
-      }
+    function mostrarListasCaptacao(dados, selecao, listas) {
+      const corresponde = unidade => selecao === "todas" || "unidade:" + unidade === selecao;
+      listas.replaceChildren();
+      if (!dados.cobertura || dados.contatos.length) listar(listas, "Responsáveis encontrados", dados.contatos.filter(c => corresponde(c.unidade)).map(c =>
+        [c.unidade, c.nome, c.email].filter(Boolean).join(" · ")
+      ));
+      const tituloCotas = dados.cotasEmAcordoNoRelatorio ? "Recibos no relatório de devedores" : "Cotas em aberto";
+      const situacoesAcordos = new Map(dados.acordos.map(a => [a.numero, a.situacao]));
+      listar(listas, tituloCotas, dados.cotas.filter(c => corresponde(c.unidade)).map(c => [
+        c.unidade, "Recibo " + c.recibo, c.vencimento, moeda.format(c.valores.at(-1) / 100),
+        c.acordoOrigem ? "Acordo " + c.acordoOrigem : null, situacoesAcordos.get(c.acordoOrigem),
+      ].filter(Boolean).join(" · ")));
+      if (!dados.cobertura || dados.acordosCaptadosEm) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => [
+        a.unidade, "Acordo " + a.numero, a.situacao, a.total == null ? null : moeda.format(a.total / 100),
+        a.parcelas ? a.parcelas.length + " parcelas" : null, a.cotas ? a.cotas.length + " cotas vinculadas" : null,
+        a.saldo == null ? null : "Saldo " + moeda.format(a.saldo / 100),
+        a.periodoNegociado ? "Período negociado " + dataCurta(a.periodoNegociado.inicio) + " a " + dataCurta(a.periodoNegociado.fim) : null,
+        a.cotasAbertasNoPeriodo?.length ? "Recibos em aberto no período (a conferir) " + a.cotasAbertasNoPeriodo.map(cota => cota.recibo).join(", ") : null,
+      ].filter(Boolean).join(" · ")));
     }
 
     login.addEventListener("submit", async (event) => {
