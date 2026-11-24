@@ -1,0 +1,30 @@
+name: Captar HFlex
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: captar-hflex-rio-negro
+
+jobs:
+  captar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npx playwright install --with-deps chrome
+      - run: npm run captar:hflex
+        env:
+          ESPELHO_PORTAL_USUARIO: ${{ secrets.AGENTE_HFLEX_USUARIO }}
+          ESPELHO_PORTAL_SENHA: ${{ secrets.AGENTE_HFLEX_SENHA }}
+          ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_DATABASE_URL }}

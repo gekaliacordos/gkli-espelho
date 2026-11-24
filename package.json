@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "captar:lello": "node captacao/executar.mjs"
+    "captar:lello": "node captacao/executar.mjs",
+    "captar:hflex": "node captacao/executar-hflex.mjs"
   },
   "repository": {
     "type": "git",
