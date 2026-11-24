@@ -57,21 +57,39 @@ export async function coletarManager(credenciais, visitar) {
           const frame = await mudou
           await filtrarWebware(frame)
           await frame.getByText(/Total Geral|Não há acordos registrados/i).first().waitFor({ timeout: 75_000 })
-          const leitura = await frame.evaluate(() => {
-            const texto = document.body.innerText
-            const tabela = [...document.querySelectorAll('table')].find(t => /Bloco[\s\S]*Unidade[\s\S]*Processo[\s\S]*Parcela/.test(t.innerText))
-            return {
-              valido: texto.includes('Acompanhamento de Acordo: Somente em Aberto'),
-              vazio: /nenhum acordo|não (?:há|existem) acordos|sem acordos/i.test(texto),
-              paginas: document.querySelector('select[name=page]')?.options.length ?? 0,
-              linhas: tabela ? [...tabela.rows].map(r => [...r.cells].map(c => ({ texto: c.innerText.trim(), colspan: c.colSpan }))) : null,
+          const paginador = frame.locator('select[name=page]')
+          const numeros = await paginador.locator('option').evaluateAll(es => es.map(e => e.value))
+          if (numeros.length > 200 || new Set(numeros).size !== numeros.length) throw Error('Paginação da Manager inválida.')
+          const acordos = []
+          const processos = new Set()
+          for (const numero of numeros.length ? numeros : [null]) {
+            if (numero !== null && await paginador.inputValue() !== numero) {
+              const anterior = await frame.locator('#tableAcordo').innerText()
+              await paginador.selectOption(numero)
+              await frame.waitForFunction(anterior => {
+                const tabela = document.querySelector('#tableAcordo')?.innerText
+                return tabela && tabela !== anterior && tabela.includes('Total Geral')
+              }, anterior, { timeout: 45_000 })
             }
-          })
-          if (!leitura.valido || leitura.paginas > 1 || (!leitura.linhas && !leitura.vazio)) {
-            throw Error('Recorte ou paginação da grade não confirmados.')
+            const leitura = await frame.evaluate(() => {
+              const texto = document.body.innerText
+              const tabela = [...document.querySelectorAll('table')].find(t => /Bloco[\s\S]*Unidade[\s\S]*Processo[\s\S]*Parcela/.test(t.innerText))
+              return {
+                valido: texto.includes('Acompanhamento de Acordo: Somente em Aberto'),
+                vazio: /nenhum acordo|não (?:há|existem) acordos|sem acordos/i.test(texto),
+                linhas: tabela ? [...tabela.rows].map(r => [...r.cells].map(c => ({ texto: c.innerText.trim(), colspan: c.colSpan }))) : null,
+              }
+            })
+            if (!leitura.valido || (!leitura.linhas && !leitura.vazio)) throw Error('Recorte da grade não confirmado.')
+            if (!leitura.linhas) continue
+            for (const acordo of interpretarTabela(leitura.linhas, { vazioConfirmado: leitura.vazio }).acordos) {
+              const id = [acordo.bloco, acordo.unidade, acordo.processo].join(':')
+              if (processos.has(id)) throw Error('Processo repetido na grade da Manager.')
+              processos.add(id)
+              acordos.push(acordo)
+            }
           }
-          if (!leitura.linhas) return []
-          return interpretarTabela(leitura.linhas, { vazioConfirmado: leitura.vazio }).acordos.map(a => {
+          return acordos.map(a => {
             const periodo = a.periodo.split(/\s+a\s+/i)
             return {
               unidade: a.bloco + '/' + a.unidade, numero: a.processo, principal: a.valor_principal_centavos,
