@@ -7,7 +7,7 @@ on:
         required: true
       AGENTE_HFLEX_SENHA:
         required: true
-      ESPELHO_DATABASE_URL:
+      ESPELHO_HFLEX_DATABASE_URL:
         required: true
 
 permissions:
@@ -37,7 +37,7 @@ jobs:
         env: &hflex-env
           ESPELHO_PORTAL_USUARIO: ${{ secrets.AGENTE_HFLEX_USUARIO }}
           ESPELHO_PORTAL_SENHA: ${{ secrets.AGENTE_HFLEX_SENHA }}
-          ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_DATABASE_URL }}
+          ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_HFLEX_DATABASE_URL }}
       - name: Captar Office Tamboré
         if: ${{ !cancelled() && steps.preparar_chrome.outcome == 'success' }}
         run: npm run captar:hflex -- hflex-5987
