@@ -28,6 +28,11 @@
     .catalog-record { display: grid; gap: .35rem .8rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
     .catalog-record dt { font-weight: 600; overflow-wrap: anywhere; }
     .catalog-record dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+    #simulador { margin-top: 1.5rem; }
+    #simulador fieldset { border: 1px solid #d5dce6; border-radius: .45rem; margin: 0; min-width: 0; }
+    #simulador label:has(input) { display: flex; align-items: baseline; gap: .45rem; }
+    #simulador input[type="checkbox"] { width: auto; margin: .35rem 0; }
+    #simulacao-revisao:not(:empty) { border-top: 1px solid #d5dce6; margin-top: 1rem; }
     .access-details { white-space: pre-wrap; overflow-wrap: anywhere; }
   </style>
 </head>
@@ -44,12 +49,40 @@
     <section id="signed-in" hidden>
       <p id="account"></p>
       <button id="exit" type="button">Sair</button>
+      <details id="simulador" hidden>
+        <summary>Simular acordo</summary>
+        <form id="simulacao-form">
+          <label for="simulacao-adm">Administradora</label>
+          <select id="simulacao-adm" required></select>
+          <label for="simulacao-condominio">Condomínio</label>
+          <select id="simulacao-condominio" required disabled></select>
+          <p id="simulacao-status" role="status" hidden></p>
+          <label for="simulacao-unidade">Unidade</label>
+          <select id="simulacao-unidade" required disabled></select>
+          <fieldset id="simulacao-cotas" hidden>
+            <legend>Cotas em aberto</legend>
+            <div></div>
+          </fieldset>
+          <fieldset id="simulacao-condicoes" disabled>
+            <legend>Condições</legend>
+            <label for="simulacao-despesa">Despesa de cobrança</label>
+            <select id="simulacao-despesa"><option value="10">10%</option><option value="20">20%</option></select>
+            <label for="simulacao-parcelas">Parcelas</label>
+            <select id="simulacao-parcelas"><option value="1">1x à vista</option><option value="2">2x</option><option value="3">3x</option></select>
+            <label><input type="checkbox" id="simulacao-juros" disabled> Juros de 1% ao mês (Price)</label>
+            <label><input type="checkbox" id="simulacao-boleto"> <span id="simulacao-boleto-texto">Cobrar boleto</span></label>
+          </fieldset>
+          <button id="simulacao-gerar" type="submit" disabled>Gerar simulação</button>
+        </form>
+        <section id="simulacao-revisao" aria-live="polite"></section>
+      </details>
       <div id="result" aria-live="polite"></div>
       <section id="catalog"></section>
     </section>
     <p id="status" role="status"></p>
   </main>
-  <script>
+  <script type="module">
+    import { agruparCotas, calcularSimulacao, hojeEmSaoPaulo, localizarCadastro, somarDias } from "./simulacao.mjs";
     const authUrl = "https://jrctpldzavctwaqiepul.supabase.co/auth/v1";
     const apiKey = "sb_publishable_TrF0lI26AdHZ1ksG650lPA_N6JrTYCz";
     const login = document.querySelector("#login");
@@ -168,19 +201,210 @@
       return bloco;
     }
 
-    async function mostrarCadastro(token) {
+    async function consultarEspelho(token, tabela, filtros) {
+      const query = new URLSearchParams(filtros);
+      const response = await fetch(new URL("/rest/v1/" + tabela + "?" + query, authUrl), {
+        headers: { apikey: apiKey, Authorization: "Bearer " + token },
+        cache: "no-store",
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!response.ok) throw new Error("Consulta indisponível");
+      return response.json();
+    }
+
+    function consultarCaptacao(token, codigo, administradora) {
+      return consultarEspelho(token, "captacoes", {
+        select: "condominio,administradora,captado_em,dados",
+        codigo_condominio: "eq." + codigo,
+        ...(administradora ? { administradora: "eq." + administradora } : {}),
+        order: "captado_em.desc",
+        limit: "1",
+      });
+    }
+
+    const simulador = document.querySelector("#simulador");
+    const formulario = document.querySelector("#simulacao-form");
+    const admSim = document.querySelector("#simulacao-adm");
+    const condominioSim = document.querySelector("#simulacao-condominio");
+    const unidadeSim = document.querySelector("#simulacao-unidade");
+    const cotasSim = document.querySelector("#simulacao-cotas");
+    const condicoesSim = document.querySelector("#simulacao-condicoes");
+    const listaCotas = cotasSim.querySelector("div");
+    const despesaSim = document.querySelector("#simulacao-despesa");
+    const parcelasSim = document.querySelector("#simulacao-parcelas");
+    const jurosSim = document.querySelector("#simulacao-juros");
+    const boletoSim = document.querySelector("#simulacao-boleto");
+    const boletoTexto = document.querySelector("#simulacao-boleto-texto");
+    const gerarSim = document.querySelector("#simulacao-gerar");
+    const revisaoSim = document.querySelector("#simulacao-revisao");
+    const statusSim = document.querySelector("#simulacao-status");
+    const formatarCentavos = valor => moeda.format(valor / 100);
+
+    function preencherOpcoes(select, itens) {
+      select.replaceChildren(new Option("Selecione", ""), ...itens.map(([valor, texto]) => new Option(texto, valor)));
+      select.disabled = !itens.length;
+    }
+
+    function mostrarStatusSim(texto) {
+      statusSim.textContent = texto;
+      statusSim.hidden = !texto;
+    }
+
+    function limparUnidadeSim() {
+      cotasSim.hidden = true;
+      condicoesSim.disabled = true;
+      listaCotas.replaceChildren();
+      revisaoSim.replaceChildren();
+      gerarSim.disabled = true;
+    }
+
+    function limparSimulador() {
+      simulador.hidden = true;
+      simulador.open = false;
+      formulario.reset();
+      for (const seletor of [admSim, condominioSim, unidadeSim]) preencherOpcoes(seletor, []);
+      admSim.onchange = condominioSim.onchange = unidadeSim.onchange = formulario.onsubmit = null;
+      mostrarStatusSim("");
+      limparUnidadeSim();
+    }
+
+    async function prepararSimulador(token, consultaCaptacoes, consultaCadastro) {
+      try {
+        const [captacoes, registros] = await Promise.all([consultaCaptacoes, consultaCadastro]);
+        if (token !== accessToken) return;
+        simulador.hidden = false;
+        const administradoras = [...new Set(captacoes.map(captacao => captacao.administradora).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, "pt-BR"));
+        preencherOpcoes(admSim, administradoras.map(adm => [adm, adm]));
+        if (!administradoras.length) mostrarStatusSim("Nenhuma captação disponível para simular.");
+
+        let unidades = new Map();
+        let custoBoleto = null;
+        let consultaAtual = 0;
+        const limparCondominio = () => {
+          consultaAtual++;
+          unidades = new Map();
+          custoBoleto = null;
+          boletoSim.checked = false;
+          preencherOpcoes(unidadeSim, []);
+          mostrarStatusSim("");
+          limparUnidadeSim();
+        };
+
+        admSim.onchange = () => {
+          limparCondominio();
+          preencherOpcoes(condominioSim, captacoes.filter(captacao => captacao.administradora === admSim.value)
+            .map(captacao => [captacao.codigo_condominio, captacao.condominio]));
+        };
+
+        condominioSim.onchange = async () => {
+          limparCondominio();
+          const codigo = condominioSim.value;
+          const administradora = admSim.value;
+          const captacao = captacoes.find(item => item.codigo_condominio === codigo && item.administradora === administradora);
+          if (!captacao) return;
+          const cadastro = localizarCadastro(captacao, registros);
+          if (!cadastro) {
+            mostrarStatusSim("O cadastro do condomínio não foi identificado para conferir a régua e o custo de boleto.");
+            return;
+          }
+          const diasRegua = Number(cadastro.dias_apos_vencimento_regua ?? cadastro.inicio_cobranca_dias ?? 30);
+          if (!Number.isSafeInteger(diasRegua) || diasRegua < 0) {
+            mostrarStatusSim("Confira a régua no cadastro do condomínio.");
+            return;
+          }
+          const custo = Number(cadastro.custo_emissao_boleto);
+          custoBoleto = cadastro.custo_emissao_boleto != null && cadastro.custo_emissao_boleto !== ""
+            && Number.isFinite(custo) && custo >= 0 ? Math.round(custo * 100) : null;
+          boletoSim.disabled = custoBoleto === null;
+          boletoTexto.textContent = custoBoleto === null ? "Cobrar boleto (custo indisponível no cadastro)"
+            : "Cobrar boleto (" + formatarCentavos(custoBoleto) + " por emissão)";
+
+          const consulta = consultaAtual;
+          mostrarStatusSim("Consultando as cotas da última captação…");
+          try {
+            const [resultado] = await consultarCaptacao(token, codigo, administradora);
+            if (token !== accessToken || consulta !== consultaAtual) return;
+            if (!resultado) throw new Error("Captação indisponível");
+            unidades = agruparCotas(resultado.dados, hojeEmSaoPaulo(), diasRegua);
+            preencherOpcoes(unidadeSim, [...unidades.keys()].map(unidade => [unidade, unidade]));
+            const mensagem = unidades.size ? "Cotas captadas em " + dataHora.format(new Date(resultado.captado_em)) + "."
+              : "Nenhuma unidade com cotas abertas dentro da régua nesta captação.";
+            mostrarStatusSim(mensagem);
+          } catch {
+            if (token === accessToken && consulta === consultaAtual) mostrarStatusSim("Não foi possível carregar as cotas. Selecione o condomínio novamente.");
+          }
+        };
+
+        unidadeSim.onchange = () => {
+          limparUnidadeSim();
+          const cotas = unidades.get(unidadeSim.value) ?? [];
+          cotas.forEach((cota, indice) => {
+            const caixa = document.createElement("input");
+            caixa.type = "checkbox";
+            caixa.value = String(indice);
+            caixa.checked = !cota.regular;
+            const rotulo = document.createElement("label");
+            rotulo.append(caixa, [
+              "Recibo " + cota.recibo, dataCurta(cota.vencimento),
+              cota.regular ? "Regular" : "Dentro da régua", formatarCentavos(cota.valor),
+            ].join(" · "));
+            listaCotas.append(rotulo);
+          });
+          cotasSim.hidden = !cotas.length;
+          condicoesSim.disabled = !cotas.length;
+          gerarSim.disabled = !cotas.length;
+        };
+
+        formulario.onsubmit = evento => {
+          evento.preventDefault();
+          const cotas = unidades.get(unidadeSim.value) ?? [];
+          const escolhidas = [...listaCotas.querySelectorAll("input:checked")].map(caixa => cotas[Number(caixa.value)]);
+          if (!escolhidas.length) return;
+          const percentual = Number(despesaSim.value);
+          const previa = calcularSimulacao({
+            cotas: escolhidas, percentual, quantidade: Number(parcelasSim.value), price: jurosSim.checked,
+            boleto: boletoSim.checked ? custoBoleto ?? 0 : 0, primeiroVencimento: somarDias(hojeEmSaoPaulo(), 7),
+          });
+          const titulo = document.createElement("h2");
+          titulo.textContent = "Confira a simulação";
+          const valores = document.createElement("dl");
+          valores.className = "catalog-record";
+          for (const [nome, valor] of [
+            ["Cotas selecionadas", previa.base], ["Despesa de cobrança (" + percentual + "%)", previa.despesa],
+            ["Juros do parcelamento", previa.juros], ["Emissão de boletos", previa.boletos], ["Total", previa.total],
+          ]) {
+            const termo = document.createElement("dt");
+            const detalhe = document.createElement("dd");
+            termo.textContent = nome;
+            detalhe.textContent = formatarCentavos(valor);
+            valores.append(termo, detalhe);
+          }
+          const plano = document.createElement("ol");
+          previa.parcelas.forEach(parcela => {
+            const item = document.createElement("li");
+            item.textContent = dataCurta(parcela.vencimento) + " · " + formatarCentavos(parcela.valor);
+            plano.append(item);
+          });
+          revisaoSim.replaceChildren(titulo, valores, plano);
+        };
+      } catch {
+        if (token !== accessToken) return;
+        simulador.hidden = false;
+        mostrarStatusSim("Não foi possível carregar as captações e o cadastro para simular.");
+      }
+    }
+
+    formulario.addEventListener("change", () => {
+      revisaoSim.replaceChildren();
+      jurosSim.disabled = parcelasSim.value === "1";
+      gerarSim.disabled = !listaCotas.querySelector("input:checked");
+    });
+
+    async function mostrarCadastro(token, consulta) {
       catalog.textContent = "Consultando o cadastro de condomínios…";
       try {
-        const query = new URLSearchParams({
-          select: "id,nome,administradora,status,cadastro,condominio_acessos(situacao,administradora,portal)", order: "nome.asc,id.asc",
-        });
-        const response = await fetch(new URL("/rest/v1/condominios?" + query, authUrl), {
-          headers: { apikey: apiKey, Authorization: "Bearer " + token },
-          cache: "no-store",
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!response.ok) throw new Error("Consulta indisponível");
-        const registros = await response.json();
+        const registros = await consulta;
         if (token !== accessToken) return;
 
         const titulo = document.createElement("h2");
@@ -244,16 +468,10 @@
       }
     }
 
-    async function mostrarSelecaoCaptacao(token) {
+    async function mostrarSelecaoCaptacao(token, consulta) {
       result.textContent = "Consultando captações…";
       try {
-        const response = await fetch(new URL("/rest/v1/captacoes_recentes?select=codigo_condominio,condominio,administradora&order=condominio.asc", authUrl), {
-          headers: { apikey: apiKey, Authorization: "Bearer " + token },
-          cache: "no-store",
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!response.ok) throw new Error("Consulta indisponível");
-        const captacoes = await response.json();
+        const captacoes = await consulta;
         if (token !== accessToken) return;
         if (!captacoes.length) {
           result.textContent = "Nenhuma captação disponível para esta conta.";
@@ -289,16 +507,7 @@
     async function mostrarCaptacao(token, codigo, painel, continuaSelecionado) {
       painel.textContent = "Consultando a captação…";
       try {
-        const query = new URLSearchParams({
-          select: "condominio,administradora,captado_em,dados", codigo_condominio: "eq." + codigo, order: "captado_em.desc", limit: "1",
-        });
-        const response = await fetch(new URL("/rest/v1/captacoes?" + query, authUrl), {
-          headers: { apikey: apiKey, Authorization: "Bearer " + token },
-          cache: "no-store",
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!response.ok) throw new Error("Consulta indisponível");
-        const [captacao] = await response.json();
+        const [captacao] = await consultarCaptacao(token, codigo);
         if (token !== accessToken || !continuaSelecionado()) return;
         if (!captacao) {
           painel.textContent = "Nenhuma captação disponível para esta conta.";
@@ -385,8 +594,15 @@
         login.hidden = true;
         signedIn.hidden = false;
         exit.focus();
-        void mostrarSelecaoCaptacao(accessToken);
-        void mostrarCadastro(accessToken);
+        const captacoes = consultarEspelho(accessToken, "captacoes_recentes", {
+          select: "codigo_condominio,condominio,administradora", order: "condominio.asc,codigo_condominio.asc",
+        });
+        const cadastro = consultarEspelho(accessToken, "condominios", {
+          select: "id,nome,administradora,status,cadastro,condominio_acessos(situacao,administradora,portal)", order: "nome.asc,id.asc",
+        });
+        void mostrarSelecaoCaptacao(accessToken, captacoes);
+        void mostrarCadastro(accessToken, cadastro);
+        void prepararSimulador(accessToken, captacoes, cadastro);
       } catch {
         status.textContent = "Não foi possível conectar. Tente novamente.";
       } finally {
@@ -413,6 +629,7 @@
         accessToken = undefined;
         account.textContent = "";
         result.textContent = "";
+        limparSimulador();
         catalog.textContent = "";
         signedIn.hidden = true;
         login.hidden = false;
