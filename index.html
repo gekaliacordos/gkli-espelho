@@ -19,11 +19,14 @@
     #status { color: #9b2525; }
     #status:empty { margin: 0; }
     #account { overflow-wrap: anywhere; }
-    #result { margin-top: 1.5rem; }
+    #result, #catalog { margin-top: 1.5rem; }
     details { border-top: 1px solid #d5dce6; padding: .7rem 0; }
     summary { cursor: pointer; }
     li { margin: .4rem 0; overflow-wrap: anywhere; }
-    #unit-filter { margin: .4rem 0 1rem; }
+    #unit-filter, #catalog-filter { margin: .4rem 0 1rem; }
+    .catalog-record { display: grid; gap: .35rem .8rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
+    .catalog-record dt { font-weight: 600; overflow-wrap: anywhere; }
+    .catalog-record dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
   </style>
 </head>
 <body>
@@ -40,6 +43,7 @@
       <p id="account"></p>
       <button id="exit" type="button">Sair</button>
       <div id="result" aria-live="polite"></div>
+      <section id="catalog"></section>
     </section>
     <p id="status" role="status"></p>
   </main>
@@ -55,6 +59,7 @@
     const account = document.querySelector("#account");
     const status = document.querySelector("#status");
     const result = document.querySelector("#result");
+    const catalog = document.querySelector("#catalog");
     const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
     const dataHora = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
     let accessToken;
@@ -74,6 +79,81 @@
         detalhes.append(lista);
       }
       destino.append(detalhes);
+    }
+
+    async function mostrarCadastro(token) {
+      catalog.textContent = "Consultando o cadastro de condomínios…";
+      try {
+        const query = new URLSearchParams({
+          select: "nome,administradora,status,cadastro", order: "nome.asc,id.asc",
+        });
+        const response = await fetch(new URL("/rest/v1/condominios?" + query, authUrl), {
+          headers: { apikey: apiKey, Authorization: "Bearer " + token },
+          cache: "no-store",
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!response.ok) throw new Error("Consulta indisponível");
+        const registros = await response.json();
+        if (token !== accessToken) return;
+
+        const titulo = document.createElement("h2");
+        titulo.textContent = "Cadastro de condomínios";
+        const rotulo = document.createElement("label");
+        rotulo.htmlFor = "catalog-filter";
+        rotulo.textContent = "Buscar por nome, CNPJ, administradora ou status";
+        const filtro = document.createElement("input");
+        filtro.type = "search";
+        filtro.id = "catalog-filter";
+        const contagem = document.createElement("p");
+        contagem.setAttribute("role", "status");
+        const lista = document.createElement("div");
+        catalog.replaceChildren(titulo, rotulo, filtro, contagem, lista);
+
+        const normalizar = texto => texto.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
+        for (const { nome, administradora, status, cadastro } of registros) {
+          const ficha = document.createElement("details");
+          const resumo = document.createElement("summary");
+          resumo.textContent = [nome, administradora, status].filter(Boolean).join(" · ");
+          ficha.append(resumo);
+          ficha.addEventListener("toggle", () => {
+            if (!ficha.open || ficha.querySelector("dl")) return;
+            const campos = document.createElement("dl");
+            campos.className = "catalog-record";
+            const principais = ["nome", "nome_operacional", "cnpj", "administradora", "status"];
+            const chaves = [...principais, ...Object.keys(cadastro).filter(chave => !principais.includes(chave)).sort()];
+            for (const chave of chaves) {
+              const termo = document.createElement("dt");
+              termo.textContent = chave === "cnpj" ? "CNPJ" : chave.replaceAll("_", " ");
+              const valor = document.createElement("dd");
+              valor.textContent = cadastro[chave] || "—";
+              campos.append(termo, valor);
+            }
+            ficha.append(campos);
+          });
+          const cnpj = cadastro.cnpj ?? "";
+          ficha.dataset.status = normalizar(status ?? "");
+
+          ficha.dataset.busca = normalizar([nome, cadastro.nome_operacional, administradora, cnpj, cnpj.replace(/\D/g, ""), status].join(" "));
+          lista.append(ficha);
+        }
+
+        function filtrarCadastro() {
+          const busca = normalizar(filtro.value);
+          let total = 0;
+          for (const ficha of lista.children) {
+            ficha.hidden = ["ativo", "inativo"].includes(busca)
+              ? ficha.dataset.status !== busca
+              : !ficha.dataset.busca.includes(busca);
+            if (!ficha.hidden) total++;
+          }
+          contagem.textContent = total + " de " + registros.length + " condomínios";
+        }
+
+        filtro.addEventListener("input", filtrarCadastro);
+        filtrarCadastro();
+      } catch {
+        if (token === accessToken) catalog.textContent = "Não foi possível consultar o cadastro.";
+      }
     }
 
     async function mostrarCaptacao(token) {
@@ -159,6 +239,7 @@
         signedIn.hidden = false;
         exit.focus();
         void mostrarCaptacao(accessToken);
+        void mostrarCadastro(accessToken);
       } catch {
         status.textContent = "Não foi possível conectar. Tente novamente.";
       } finally {
@@ -185,6 +266,7 @@
         accessToken = undefined;
         account.textContent = "";
         result.textContent = "";
+        catalog.textContent = "";
         signedIn.hidden = true;
         login.hidden = false;
         exit.disabled = false;
