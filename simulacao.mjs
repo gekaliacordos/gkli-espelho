@@ -12,7 +12,12 @@ export function localizarCadastro(captacao, registros) {
     ? registro.administradora_chave === captacao.administradora_chave
     : [registro.administradora, registro.condominio_acessos?.administradora]
       .some(valor => normalizar(valor) === administradora))
-  return daAdministradora.length === 1 ? daAdministradora[0].cadastro : null
+  if (daAdministradora.length === 1) return daAdministradora[0].cadastro
+  if (candidatos.length || !captacao.administradora_chave) return null
+  const semPrefixo = nome => normalizar(nome).replace(/^condominio /, '')
+  const alternativas = registros.filter(registro => registro.administradora_chave === captacao.administradora_chave
+    && [registro.nome, registro.cadastro.nome_operacional].some(valor => semPrefixo(valor) === semPrefixo(nome)))
+  return alternativas.length === 1 ? alternativas[0].cadastro : null
 }
 
 export function hojeEmSaoPaulo(instante = new Date()) {
