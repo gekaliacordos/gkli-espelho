@@ -76,7 +76,9 @@ async function visitar(codigo, nome, coletar) {
 
 try {
   if (!nomes[portal]) throw Error('Portal desconhecido.')
-  const credenciais = JSON.parse(process.env.ESPELHO_PORTAL_CONFIG || '{}') ?? {}
+  const segredo = process.env.ESPELHO_PORTAIS_B64
+  if (!segredo) throw Error('Segredo dos portais indisponível.')
+  const credenciais = JSON.parse(Buffer.from(segredo, 'base64').toString('utf8'))[portal] ?? {}
   const url = process.env.ESPELHO_DATABASE_URL
   if (!url) throw Error('Conexão ausente.')
   if (portal === 'lello') {

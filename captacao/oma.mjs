@@ -52,6 +52,7 @@ export async function coletarOma(credenciais, visitar) {
   await visitar('oma-22785', 'Viso Moema', async etapa => {
     const cotas = await etapa('cotas', async () => {
       const browser = await chromium.launch({ channel: 'chrome', headless: true })
+      let fase = 'abertura'
       try {
         const pagina = await browser.newPage()
         await pagina.goto('https://oma.com.br/condominios/', { waitUntil: 'domcontentloaded' })
@@ -61,20 +62,28 @@ export async function coletarOma(credenciais, visitar) {
         await form.locator('input[name="LoginForm[password]"]').fill(credenciais.senha)
         await form.locator('button[type=submit]').click()
         await pagina.waitForURL(u => u.origin === origem && u.pathname.endsWith('/escolherPortal'))
-        const links = await pagina.locator('a').evaluateAll(es => [...new Set(es.filter(e => /^VISO MOEMA(?:\s|$)/i.test(e.innerText.trim()) && e.pathname.endsWith('/changeCondominioPadrao/id/22785')).map(e => e.href))])
+        fase = 'seleção de Viso Moema'
+        const vinculos = pagina.locator('a[href*="changeCondominioPadrao/id/22785"]')
+        await vinculos.first().waitFor({ state: 'attached' })
+        const links = await vinculos.evaluateAll(es => [...new Set(es.filter(e => /^VISO MOEMA(?:\s|$)/i.test(e.textContent.trim())).map(e => e.href))])
         if (links.length !== 1 || new URL(links[0]).origin !== origem) throw Error('Vínculo de Viso Moema indisponível.')
         await pagina.goto(links[0], { waitUntil: 'domcontentloaded' })
         await pagina.goto(origem + '/intra', { waitUntil: 'domcontentloaded' })
         await pagina.locator('a:visible').filter({ hasText: /Balancete interativo/i }).first().click()
+        fase = 'balancete interativo'
         const financeiro = pagina.frameLocator('iframe[src*="appweb.winker.com.br"]').first()
         await financeiro.getByText('Relatórios', { exact: true }).first().click({ timeout: 50_000 })
         const popup = pagina.context().waitForEvent('page', { timeout: 50_000 })
         popup.catch(() => {})
         await financeiro.getByText('Inadimplentes', { exact: true }).first().click()
+        fase = 'relatório de inadimplência'
         const relatorio = await popup
         await relatorio.getByText(/Total de unidades inadimplentes:/i).first().waitFor()
         if (new URL(relatorio.url()).origin !== origem) throw Error('Origem do relatório OMA divergente.')
         return lerInadimplencia(await relatorio.locator('body').innerText())
+      } catch (erro) {
+        console.error('OMA:', fase, erro.name === 'TimeoutError' ? 'tempo esgotado' : 'falhou')
+        throw erro
       } finally {
         await browser.close()
       }

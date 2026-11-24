@@ -60,4 +60,4 @@ jobs:
           SELECAO: ${{ inputs.administradora }}
           CONDOMINIO: ${{ inputs.condominio }}
           ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_COLETORES_DATABASE_URL }}
-          ESPELHO_PORTAL_CONFIG: ${{ toJSON(fromJSON(secrets.ESPELHO_PORTAIS || '{}')[matrix.portal]) }}
+          ESPELHO_PORTAIS_B64: ${{ secrets.ESPELHO_PORTAIS_V2 }}

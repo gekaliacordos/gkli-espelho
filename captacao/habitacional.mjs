@@ -118,9 +118,12 @@ const tokenHabita = texto => texto.match(/paravoce@habita\.com\.br[\s\S]{0,1200}
 export async function coletarHabitacional(credenciais, visitar) {
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
   const caixa = await browser.newPage(), pagina = await browser.newPage()
+  let etapa = 'abertura do Outlook'
   try {
     await caixa.goto('https://outlook.office.com/mail/', { waitUntil: 'domcontentloaded' })
     const microsoft = () => new URL(caixa.url()).origin === 'https://login.microsoftonline.com'
+    if (!microsoft()) await caixa.waitForURL(u => u.origin === 'https://login.microsoftonline.com', { timeout: 25_000 })
+    etapa = 'login do Outlook'
     if (!microsoft()) throw Error('Origem do login da caixa divergente.')
     await caixa.locator('input[type=email]').fill(credenciais.usuario)
     await caixa.getByRole('button', { name: /Next|Avançar/i }).click()
@@ -135,14 +138,17 @@ export async function coletarHabitacional(credenciais, visitar) {
       caixa.waitForURL(u => u.origin === 'https://outlook.office.com', { timeout: 15_000 }),
     ]).catch(() => {})
     if (await nao.isVisible()) await nao.click()
+    etapa = 'caixa de entrada'
     await caixa.getByText(/Habita Para Você.*Envio de Token/).first().waitFor({ timeout: 45_000 })
     const anterior = tokenHabita(await caixa.locator('body').innerText())
+    etapa = 'solicitação do código'
     await pagina.goto(origem + '/parceiro/Login', { waitUntil: 'domcontentloaded' })
     if (new URL(pagina.url()).origin !== origem) throw Error('Origem do portal Habitacional divergente.')
     const avancar = pagina.getByRole('button', { name: 'Avançar', exact: true }).filter({ visible: true }).first()
     await pagina.locator('#email').fill(credenciais.usuario)
     await avancar.click()
     await pagina.locator('#token').waitFor()
+    etapa = 'recebimento do código'
     let token
     for (let i = 0; i < 60; i++) {
       token = tokenHabita(await caixa.locator('body').innerText())
@@ -150,9 +156,11 @@ export async function coletarHabitacional(credenciais, visitar) {
       await new Promise(resolve => setTimeout(resolve, 2000))
     }
     if (!token || token === anterior || new URL(pagina.url()).origin !== origem) throw Error('Token novo da Habitacional não confirmado.')
+    etapa = 'autenticação no portal'
     await pagina.locator('#token').fill(token)
     await avancar.click()
     await pagina.waitForURL(u => u.origin === origem && u.pathname.endsWith('/CondominioLista'))
+    etapa = 'relatórios por condomínio'
     for (const alvo of alvosHabitacional) {
       await visitar('habitacional-' + alvo[0], alvo[2], async etapa => {
         if (!pagina.url().endsWith('/CondominioLista')) await pagina.goto(origem + '/parceiro/Home/CondominioLista', { waitUntil: 'domcontentloaded' })
@@ -178,6 +186,9 @@ export async function coletarHabitacional(credenciais, visitar) {
         return cotas && acordos ? { cotas: conciliar(cotas, acordos), acordos } : { acordos }
       })
     }
+  } catch (erro) {
+    console.error('Habitacional:', etapa, erro.name === 'TimeoutError' ? 'tempo esgotado' : 'falhou')
+    throw erro
   } finally {
     await browser.close()
   }
