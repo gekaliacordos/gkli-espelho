@@ -58,56 +58,59 @@
         <h2 id="acordo-titulo">Simular acordo</h2>
         <p id="simulador-carregando" role="status">Consultando captações e cadastro…</p>
         <div id="simulador" hidden>
-          <form id="simulacao-form">
-            <div class="simulacao-colunas">
-              <div class="simulacao-coluna">
-                <label for="simulacao-adm">Administradora</label>
-                <select id="simulacao-adm" size="8" required disabled></select>
+          <details id="simulacao-configuracao" open>
+            <summary>Cotas e condições</summary>
+            <form id="simulacao-form">
+              <div class="simulacao-colunas">
+                <div class="simulacao-coluna">
+                  <label for="simulacao-adm">Administradora</label>
+                  <select id="simulacao-adm" size="8" required disabled></select>
+                </div>
+                <div class="simulacao-coluna">
+                  <label for="simulacao-condominio">Condomínio</label>
+                  <select id="simulacao-condominio" size="8" required disabled><option>Selecione a administradora</option></select>
+                </div>
+                <div class="simulacao-coluna">
+                  <label for="simulacao-unidade">Unidade</label>
+                  <select id="simulacao-unidade" size="8" required disabled><option>Selecione o condomínio</option></select>
+                </div>
+                <div id="simulacao-cotas" class="simulacao-coluna" role="group" aria-labelledby="simulacao-cotas-titulo">
+                  <span class="coluna-titulo" id="simulacao-cotas-titulo">Cotas em aberto</span>
+                  <div class="simulacao-lista-cotas"><p>Selecione a unidade.</p></div>
+                </div>
               </div>
-              <div class="simulacao-coluna">
-                <label for="simulacao-condominio">Condomínio</label>
-                <select id="simulacao-condominio" size="8" required disabled><option>Selecione a administradora</option></select>
-              </div>
-              <div class="simulacao-coluna">
-                <label for="simulacao-unidade">Unidade</label>
-                <select id="simulacao-unidade" size="8" required disabled><option>Selecione o condomínio</option></select>
-              </div>
-              <div id="simulacao-cotas" class="simulacao-coluna" role="group" aria-labelledby="simulacao-cotas-titulo">
-                <span class="coluna-titulo" id="simulacao-cotas-titulo">Cotas em aberto</span>
-                <div class="simulacao-lista-cotas"><p>Selecione a unidade.</p></div>
-              </div>
-            </div>
-            <p id="simulacao-status" role="status" hidden></p>
-            <details id="simulacao-editar-cotas" hidden>
-              <summary>Editar valores das cotas</summary>
-              <div id="simulacao-valores-cotas"></div>
-              <p id="simulacao-erro-cotas" class="simulacao-nota" role="alert" hidden></p>
-            </details>
-            <fieldset id="simulacao-condicoes" disabled>
-              <legend>Condições</legend>
-              <div class="simulacao-opcoes">
-                <label>Despesa de cobrança
-                  <select id="simulacao-despesa"><option value="10">10%</option><option value="20">20%</option></select>
-                </label>
-                <label>Parcelas
-                  <select id="simulacao-parcelas"><option value="1">1x à vista</option><option value="2">2x</option><option value="3">3x</option></select>
-                </label>
-                <label>Primeiro vencimento
-                  <input type="date" id="simulacao-primeiro-vencimento" required>
-                </label>
-                <label id="simulacao-dia-mensal-campo" hidden>Dia das demais parcelas
-                  <select id="simulacao-dia-mensal" disabled>
-                    <option value="">Mesmo dia do primeiro vencimento</option>
-                  </select>
-                </label>
-                <label id="simulacao-isencao" hidden><input type="checkbox" id="simulacao-isentar-regulares" disabled> Isentar parcela vigente</label>
-                <label><input type="checkbox" id="simulacao-juros" disabled> Juros de 1% ao mês (Price)</label>
-                <label><input type="checkbox" id="simulacao-boleto"> <span id="simulacao-boleto-texto">Cobrar boleto</span></label>
-              </div>
-              <p id="simulacao-limite-parcelas" class="simulacao-nota" aria-live="polite" hidden></p>
-            </fieldset>
-            <button id="simulacao-gerar" type="submit" disabled>Simular acordo</button>
-          </form>
+              <p id="simulacao-status" role="status" hidden></p>
+              <details id="simulacao-editar-cotas" hidden>
+                <summary>Editar valores das cotas</summary>
+                <div id="simulacao-valores-cotas"></div>
+                <p id="simulacao-erro-cotas" class="simulacao-nota" role="alert" hidden></p>
+              </details>
+              <fieldset id="simulacao-condicoes" disabled>
+                <legend>Condições</legend>
+                <div class="simulacao-opcoes">
+                  <label>Despesa de cobrança
+                    <select id="simulacao-despesa"><option value="10">10%</option><option value="20">20%</option></select>
+                  </label>
+                  <label>Parcelas
+                    <select id="simulacao-parcelas"><option value="1">1x à vista</option><option value="2">2x</option><option value="3">3x</option></select>
+                  </label>
+                  <label>Primeiro vencimento
+                    <input type="date" id="simulacao-primeiro-vencimento" required>
+                  </label>
+                  <label id="simulacao-dia-mensal-campo" hidden>Dia das demais parcelas
+                    <select id="simulacao-dia-mensal" disabled>
+                      <option value="">Mesmo dia do primeiro vencimento</option>
+                    </select>
+                  </label>
+                  <label id="simulacao-isencao" hidden><input type="checkbox" id="simulacao-isentar-regulares" disabled> Isentar parcela vigente</label>
+                  <label><input type="checkbox" id="simulacao-juros" disabled> Juros de 1% ao mês (Price)</label>
+                  <label><input type="checkbox" id="simulacao-boleto"> <span id="simulacao-boleto-texto">Cobrar boleto</span></label>
+                </div>
+                <p id="simulacao-limite-parcelas" class="simulacao-nota" aria-live="polite" hidden></p>
+              </fieldset>
+              <button id="simulacao-gerar" type="submit" disabled>Simular acordo</button>
+            </form>
+          </details>
           <section id="simulacao-revisao" aria-live="polite"></section>
         </div>
       </section>
@@ -346,6 +349,7 @@
     const simulador = document.querySelector("#simulador");
     const simuladorCarregando = document.querySelector("#simulador-carregando");
     const formulario = document.querySelector("#simulacao-form");
+    const configuracaoSim = document.querySelector("#simulacao-configuracao");
     const admSim = document.querySelector("#simulacao-adm");
     const condominioSim = document.querySelector("#simulacao-condominio");
     const unidadeSim = document.querySelector("#simulacao-unidade");
@@ -476,18 +480,22 @@
       return editor;
     }
 
+    const selecaoCompacta = matchMedia("(max-width: 38rem)");
+
+    function ajustarTamanhoSelecao(lista) {
+      const valor = lista.value;
+      lista.size = selecaoCompacta.matches ? 1 : 8;
+      if (lista.value !== valor) lista.value = valor;
+    }
+
+    selecaoCompacta.addEventListener("change", () => {
+      document.querySelectorAll(".simulacao-coluna > select").forEach(ajustarTamanhoSelecao);
+    });
+
     function preencherOpcoes(select, itens) {
-      select.replaceChildren(...itens.map(([valor, texto]) => new Option(texto, valor)));
-      select.disabled = !itens.length;
-      if (itens.length) {
-        if (select === condominioSim) select.prepend(new Option("Selecione o condomínio", ""));
-        select.selectedIndex = -1;
-      }
-      else {
-        const mensagem = select === condominioSim ? "Selecione a administradora"
-          : select === unidadeSim ? "Selecione o condomínio" : "Nenhuma administradora";
-        select.append(new Option(mensagem, ""));
-      }
+      const mensagem = select === condominioSim ? "Selecione a administradora"
+        : select === unidadeSim ? "Selecione o condomínio" : "Nenhuma administradora";
+      opcoesConsulta(select, itens, mensagem, select === condominioSim ? "Selecione o condomínio" : "Selecione");
     }
 
     function mostrarStatusSim(texto) {
@@ -496,6 +504,7 @@
     }
 
     function limparUnidadeSim() {
+      configuracaoSim.open = true;
       condicoesSim.disabled = true;
       atualizarCondicoesSim();
       isencaoSim.hidden = true;
@@ -722,12 +731,15 @@
             editarCotas.className = "simulacao-editar-condicoes";
             editarCotas.textContent = "Editar cotas e condições";
             editarCotas.addEventListener("click", () => {
+              configuracaoSim.open = true;
               editorCotasSim.open = true;
               valoresCotasSim.querySelector("label:not([hidden]) input")?.focus();
             });
             revisaoSim.append(plano, editarCotas, editar, compartilharSimulacao(texto));
           }
           renderizar(previa.parcelas);
+          configuracaoSim.open = false;
+          revisaoSim.querySelector("h2").focus();
         };
       } catch {
         if (token !== accessToken) return;
@@ -772,7 +784,7 @@
       if (lista) {
         rotulo.htmlFor = id;
         corpo.id = id;
-        corpo.size = 8;
+        ajustarTamanhoSelecao(corpo);
       } else {
         rotulo.id = id;
         rotulo.className = "coluna-titulo";
@@ -784,11 +796,14 @@
       return { coluna, corpo };
     }
 
-    function opcoesConsulta(lista, itens, vazio = "Nenhum resultado") {
-      lista.replaceChildren(...itens.map(([valor, texto]) => new Option(texto, valor)));
+    function opcoesConsulta(lista, itens, vazio = "Nenhum resultado", instrucao = "Selecione") {
+      const marcador = new Option(itens.length ? instrucao : vazio, "");
+      marcador.hidden = itens.length > 0 && lista !== condominioSim;
+      marcador.disabled = marcador.hidden;
+      lista.replaceChildren(marcador, ...itens.map(([valor, texto]) => new Option(texto, valor)));
       lista.disabled = !itens.length;
-      if (itens.length) lista.selectedIndex = -1;
-      else lista.append(new Option(vazio, ""));
+      ajustarTamanhoSelecao(lista);
+      lista.value = "";
     }
 
     function montarColunas(destino, titulo, classe, partes, antes = []) {
@@ -943,7 +958,7 @@
           } catch {
             if (token === accessToken && atual === pedido) {
               status.textContent = "Não foi possível consultar a captação.";
-              condominio.corpo.selectedIndex = -1;
+              condominio.corpo.value = "";
             }
           }
         });
@@ -1133,7 +1148,7 @@
           } catch {
             if (token !== accessToken || atual !== pedido) return;
             conteudo.textContent = "Não foi possível carregar o ranking. Selecione o condomínio novamente.";
-            condominio.corpo.selectedIndex = -1;
+            condominio.corpo.value = "";
           }
         });
       } catch {

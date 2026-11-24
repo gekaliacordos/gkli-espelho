@@ -413,3 +413,66 @@ li { margin: .4rem 0; overflow-wrap: anywhere; }
 #simulacao-editar-cotas[open] > summary { margin-bottom: .6rem; }
 .simulacao-editar-condicoes { background: var(--branco); color: var(--petroleo-escuro); border-color: var(--borda); }
 .simulacao-editar-condicoes:hover { background: var(--azul-claro); }
+
+/* As áreas de trabalho usam uma altura menor que a capa do aplicativo. */
+@media screen {
+  main:has(#signed-in > section:not([hidden])) { padding-bottom: 1.25rem; }
+  main:has(#signed-in > section:not([hidden])) .marca { min-height: 3.65rem; }
+  main:has(#signed-in > section:not([hidden])) .marca img { width: 6.9rem; }
+  .session-header { padding-block: .4rem; }
+  #voltar-inicio { margin-block: .25rem .65rem; }
+  #signed-in > section { padding: clamp(.8rem, 2vw, 1.25rem); }
+  #result h2, #catalog h2, #relatorios h2, #acordo-titulo { margin-bottom: .6rem; }
+  .simulacao-coluna > select, .simulacao-lista-cotas { height: clamp(8rem, 21dvh, 12rem); }
+  .simulacao-coluna > label, .coluna-titulo { padding: .45rem .65rem; }
+  .simulacao-coluna option { padding: .28rem; }
+  #catalog [role="status"], #result [role="status"] p { margin-block: .35rem; }
+  .colunas-captacao { margin-top: .55rem; }
+  #simulador { margin-top: .5rem; }
+  #simulacao-form { gap: .58rem; }
+  .simulacao-opcoes { gap: .35rem 1rem; padding: .25rem; }
+  #simulacao-revisao:not(:empty) { margin-top: .65rem; }
+  .inicio-hero { min-height: clamp(7rem, 16dvh, 11rem); padding-block: 1.25rem; }
+  .home-cards:not([hidden]) { gap: .75rem; margin-block-start: .75rem; }
+  .home-card { min-height: 7.5rem; padding: .85rem; }
+}
+
+#simulacao-configuracao { padding: .35rem 0 0; }
+#simulacao-configuracao[open] > summary { margin-bottom: .5rem; }
+
+@media screen and (max-width: 38rem) {
+  .marca { min-height: 3.8rem; }
+  .entrada { margin-block: 1rem; }
+  .entrada-conteudo { padding-block: 1.1rem 1.7rem; }
+  .entrada-conteudo > p:not([role]) { margin-block: .55rem .85rem; }
+  .home-cards:not([hidden]) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+  .home-card { min-height: 0; grid-template-columns: 1fr auto; align-content: start; gap: .35rem; }
+  .home-card strong, .home-card span:not(.card-icone) { grid-column: 1 / -1; grid-row: auto; }
+  .home-card::after { grid-column: 2; }
+  .card-icone { grid-row: 1; width: 2.05rem; height: 2.05rem; margin: 0; }
+  .card-icone-cadastro::before { inset: .42rem .59rem; }
+  .card-icone-cadastro::after { inset: .78rem .79rem; }
+  .card-icone-relatorios::before { inset: .48rem .41rem; }
+  .simulacao-colunas { grid-template-columns: minmax(0, 1fr); gap: .4rem; }
+  .simulacao-coluna:has(> select) {
+    grid-template: 1fr / minmax(0, .9fr) minmax(0, 1.35fr);
+    align-items: stretch;
+  }
+  .simulacao-coluna > label { align-self: center; font-size: .9rem; }
+  .simulacao-coluna > select {
+    height: auto; min-height: 2.75rem; min-width: 0;
+    border-top: 0; border-inline-start: 1px solid var(--borda); padding-inline: .45rem;
+    text-overflow: ellipsis;
+  }
+  .simulacao-lista-cotas { height: auto; max-height: 9rem; }
+  .simulacao-lista-cotas > p { margin-block: .3rem; }
+  .simulacao-opcoes { gap: .45rem .75rem; }
+}
+
+@media screen and (max-width: 38rem) {
+  .simulacao-opcoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .simulacao-opcoes > label { min-width: 0; font-size: .9rem; }
+  .simulacao-opcoes > label :is(select, input[type="date"]) {
+    width: 100%; min-width: 0; max-width: 100%; margin-block-start: .2rem;
+  }
+}
