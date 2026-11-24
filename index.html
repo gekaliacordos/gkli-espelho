@@ -338,9 +338,12 @@
           if (!dados.cobertura || dados.contatos.length) listar(listas, "Responsáveis encontrados", dados.contatos.filter(c => corresponde(c.unidade)).map(c =>
             [c.unidade, c.nome, c.email].filter(Boolean).join(" · ")
           ));
-          listar(listas, "Cotas em aberto", dados.cotas.filter(c => corresponde(c.unidade)).map(c =>
-            [c.unidade, "Recibo " + c.recibo, c.vencimento, moeda.format(c.valores.at(-1) / 100)].join(" · ")
-          ));
+          const tituloCotas = dados.cotasEmAcordoNoRelatorio ? "Recibos no relatório de devedores" : "Cotas em aberto";
+          const situacoesAcordos = new Map(dados.acordos.map(a => [a.numero, a.situacao]));
+          listar(listas, tituloCotas, dados.cotas.filter(c => corresponde(c.unidade)).map(c => [
+            c.unidade, "Recibo " + c.recibo, c.vencimento, moeda.format(c.valores.at(-1) / 100),
+            c.acordoOrigem ? "Acordo " + c.acordoOrigem : null, situacoesAcordos.get(c.acordoOrigem),
+          ].filter(Boolean).join(" · ")));
           if (!dados.cobertura || dados.acordosCaptadosEm) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => [
             a.unidade, "Acordo " + a.numero, a.situacao, a.total == null ? null : moeda.format(a.total / 100),
             a.parcelas.length + " parcelas", a.cotas ? a.cotas.length + " cotas vinculadas" : null,
