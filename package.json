@@ -1,0 +1,25 @@
+{
+  "name": "gkli-espelho",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "captar:lello": "node captacao/executar.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gekaliacordos/gkli-espelho.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/gekaliacordos/gkli-espelho/issues"
+  },
+  "homepage": "https://github.com/gekaliacordos/gkli-espelho#readme",
+  "private": true,
+  "dependencies": {
+    "pg": "8.23.1",
+    "playwright": "1.62.1"
+  }
+}

@@ -1,0 +1,27 @@
+name: Captar Lello
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: captar-lello-safira
+
+jobs:
+  captar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chrome
+      - run: node captacao/executar.mjs
+        env:
+          AGENTE_LELLO_SAFIRA_USUARIO: ${{ secrets.AGENTE_LELLO_SAFIRA_USUARIO }}
+          AGENTE_LELLO_SAFIRA_SENHA: ${{ secrets.AGENTE_LELLO_SAFIRA_SENHA }}
+          ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_DATABASE_URL }}

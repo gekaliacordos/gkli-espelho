@@ -8,7 +8,7 @@
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem;
       font: 1rem system-ui, sans-serif; background: #f3f5f8; color: #172337; }
-    main { width: min(100%, 26rem); padding: 2rem; border: 1px solid #d5dce6;
+    main { width: min(100%, 45rem); padding: 2rem; border: 1px solid #d5dce6;
       border-radius: 1rem; background: white; }
     h1 { margin: 0 0 1.5rem; font-size: 1.75rem; }
     form:not([hidden]) { display: grid; gap: .6rem; }
@@ -19,6 +19,10 @@
     #status { color: #9b2525; }
     #status:empty { margin: 0; }
     #account { overflow-wrap: anywhere; }
+    #result { margin-top: 1.5rem; }
+    details { border-top: 1px solid #d5dce6; padding: .7rem 0; }
+    summary { cursor: pointer; }
+    li { margin: .4rem 0; overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
@@ -34,6 +38,7 @@
     <section id="signed-in" hidden>
       <p id="account"></p>
       <button id="exit" type="button">Sair</button>
+      <div id="result" aria-live="polite"></div>
     </section>
     <p id="status" role="status"></p>
   </main>
@@ -48,7 +53,63 @@
     const signedIn = document.querySelector("#signed-in");
     const account = document.querySelector("#account");
     const status = document.querySelector("#status");
+    const result = document.querySelector("#result");
+    const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+    const dataHora = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
     let accessToken;
+
+    function listar(titulo, linhas) {
+      const detalhes = document.createElement("details");
+      const rotulo = document.createElement("summary");
+      rotulo.textContent = titulo + " (" + linhas.length + ")";
+      detalhes.append(rotulo);
+      if (linhas.length) {
+        const lista = document.createElement("ul");
+        for (const linha of linhas) {
+          const item = document.createElement("li");
+          item.textContent = linha;
+          lista.append(item);
+        }
+        detalhes.append(lista);
+      }
+      result.append(detalhes);
+    }
+
+    async function mostrarCaptacao(token) {
+      result.textContent = "Consultando a captação…";
+      try {
+        const query = new URLSearchParams({
+          select: "condominio,captado_em,dados", order: "captado_em.desc", limit: "1",
+        });
+        const response = await fetch(new URL("/rest/v1/captacoes?" + query, authUrl), {
+          headers: { apikey: apiKey, Authorization: "Bearer " + token },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!response.ok) throw new Error("Consulta indisponível");
+        const [captacao] = await response.json();
+        if (token !== accessToken) return;
+        if (!captacao) {
+          result.textContent = "Nenhuma captação disponível para esta conta.";
+          return;
+        }
+        const { condominio, captado_em, dados } = captacao;
+        result.textContent = "";
+        const titulo = document.createElement("h2");
+        titulo.textContent = "Lello · " + condominio;
+        const data = document.createElement("p");
+        data.textContent = "Captado em " + dataHora.format(new Date(captado_em));
+        result.append(titulo, data);
+        listar("Unidades identificadas", dados.unidades.slice().sort());
+        listar("Responsáveis encontrados", dados.contatos.map(c => [c.unidade, c.nome, c.email].filter(Boolean).join(" · ")));
+        listar("Cotas em aberto", dados.cotas.map(c => [c.unidade, "Recibo " + c.recibo, c.vencimento].join(" · ")));
+        listar("Acordos", dados.acordos.map(a => [
+          a.unidade, "Acordo " + a.numero, a.situacao, a.total == null ? null : moeda.format(a.total / 100),
+          a.parcelas.length + " parcelas", a.cotas.length + " cotas vinculadas",
+        ].filter(Boolean).join(" · ")));
+      } catch {
+        if (token === accessToken) result.textContent = "Não foi possível consultar a captação.";
+      }
+    }
 
     login.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -75,6 +136,7 @@
         login.hidden = true;
         signedIn.hidden = false;
         exit.focus();
+        void mostrarCaptacao(accessToken);
       } catch {
         status.textContent = "Não foi possível conectar. Tente novamente.";
       } finally {
@@ -100,6 +162,7 @@
       } finally {
         accessToken = undefined;
         account.textContent = "";
+        result.textContent = "";
         signedIn.hidden = true;
         login.hidden = false;
         exit.disabled = false;
