@@ -71,7 +71,7 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
   signal.addEventListener('abort', fechar, { once: true })
   try {
     signal.throwIfAborted()
-    const context = await browser.newContext()
+    const context = await browser.newContext({ locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' })
     context.on('response', res => {
       if (new URL(res.url()).origin === origem && [429, 503].includes(res.status())) {
         respostaTemporaria = res.status()
@@ -172,16 +172,20 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
 
     const urlsCotas = links(indiceCotas, caminhos.cotas)
     const posicao = [new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }), indiceCotas.linhas]
+    const formatos = new Map()
     const cotas = await coletarEtapaLello(etapas, 'cotas', urlsCotas, posicao, progresso, async () => {
       const itens = (await lote(urlsCotas, async (tab, url) => {
         const unidade = url.searchParams.get('codUnidade')
         const tela = await visitar(tab, url)
         if (!unidade || !tela.linhas.some(r => r[0] === 'Recibo' && r[1] === 'Vencimento')) throw Error('Ficha de cotas inválida.')
-        return tela.linhas.filter(r => /^\d+$/.test(r[0]) && dataBR(r[1])).map(r => ({
-          unidade, recibo: r[0], vencimento: dataBR(r[1]), valores: r.slice(2).map(dinheiro),
-        }))
+        return tela.linhas.filter(r => /^\d+$/.test(r[0]) && dataBR(r[1])).map(r => {
+          const formato = r.slice(2).map(v => dinheiro(v) !== null ? 'V' : v ? 'X' : '_').join('')
+          formatos.set(formato, (formatos.get(formato) ?? 0) + 1)
+          return { unidade, recibo: r[0], vencimento: dataBR(r[1]), valores: r.slice(2).map(dinheiro) }
+        })
       }, 'Cotas')).flat()
       if (itens.length !== Number(totalCotas) || itens.some(c => c.valores.length < 5 || c.valores.some(v => v === null))) {
+        progresso('Cotas conferidas: ' + itens.length + '/' + totalCotas + ' · formatos ' + JSON.stringify(Object.fromEntries(formatos)))
         throw Error('Detalhamento de cotas diverge do total da Lello.')
       }
       return itens

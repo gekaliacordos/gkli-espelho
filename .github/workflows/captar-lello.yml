@@ -7,6 +7,7 @@ on:
         type: choice
         default: Safira
         options:
+          - Todos
           - Safira
           - Bosque Marajoara
           - Solar dos Bandeirantes
@@ -36,13 +37,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chrome
-      - run: node captacao/executar.mjs "$LELLO_CONDOMINIO"
+      - name: Captar e gravar no Supabase
+        run: |
+          if [ "$LELLO_CONDOMINIO" = "Todos" ]; then LELLO_CONDOMINIO=""; fi
+          node captacao/executar-nuvem.mjs lello "$LELLO_CONDOMINIO"
         env:
           LELLO_CONDOMINIO: ${{ inputs.condominio }}
-          AGENTE_LELLO_USUARIO: ${{ secrets.AGENTE_LELLO_USUARIO }}
-          AGENTE_LELLO_SENHA: ${{ secrets.AGENTE_LELLO_SENHA }}
-          AGENTE_LELLO_TOPAZIO_USUARIO: ${{ secrets.AGENTE_LELLO_TOPAZIO_USUARIO }}
-          AGENTE_LELLO_TOPAZIO_SENHA: ${{ secrets.AGENTE_LELLO_TOPAZIO_SENHA }}
-          AGENTE_LELLO_SAFIRA_USUARIO: ${{ secrets.AGENTE_LELLO_SAFIRA_USUARIO }}
-          AGENTE_LELLO_SAFIRA_SENHA: ${{ secrets.AGENTE_LELLO_SAFIRA_SENHA }}
           ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_COLETORES_DATABASE_URL }}
+          ESPELHO_PORTAIS_B64: ${{ secrets.ESPELHO_PORTAIS_V2 }}

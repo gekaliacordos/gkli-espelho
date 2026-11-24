@@ -82,7 +82,7 @@ try {
   const url = process.env.ESPELHO_DATABASE_URL
   if (!url) throw Error('Conexão ausente.')
   if (portal === 'lello') {
-    const alvos = alvosLello.filter(a => !alvo || a.codigo === alvo)
+    const alvos = alvosLello.filter(a => !alvo || a.codigo === alvo || a.nome === alvo)
     if (!alvos.length) throw Error('Alvo ausente.')
     for (const a of alvos) {
       const perfil = credenciais[a.perfil]
