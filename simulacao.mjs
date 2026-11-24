@@ -8,8 +8,9 @@ export function localizarCadastro(captacao, registros) {
     [cadastrado, cadastro.nome_operacional].some(valor => normalizar(valor) === nome))
   if (candidatos.length === 1) return candidatos[0].cadastro
   const administradora = normalizar(captacao.administradora)
-  const daAdministradora = candidatos.filter(registro =>
-    [registro.administradora, registro.condominio_acessos?.administradora]
+  const daAdministradora = candidatos.filter(registro => captacao.administradora_chave
+    ? registro.administradora_chave === captacao.administradora_chave
+    : [registro.administradora, registro.condominio_acessos?.administradora]
       .some(valor => normalizar(valor) === administradora))
   return daAdministradora.length === 1 ? daAdministradora[0].cadastro : null
 }
