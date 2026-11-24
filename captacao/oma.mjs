@@ -65,7 +65,11 @@ export async function coletarOma(credenciais, visitar) {
         fase = 'seleção de Viso Moema'
         const vinculos = pagina.locator('a[href*="changeCondominioPadrao/id/22785"]')
         await vinculos.first().waitFor({ state: 'attached' })
-        const links = await vinculos.evaluateAll(es => [...new Set(es.filter(e => /^VISO MOEMA(?:\s|$)/i.test(e.textContent.trim())).map(e => e.href))])
+        const links = await vinculos.evaluateAll(es => [...new Set(es.filter(e =>
+          e.origin === 'https://app.winker.com.br'
+          && e.pathname === '/intra/default/changeCondominioPadrao/id/22785'
+          && /^VISO MOEMA(?:\s|$)/i.test(e.innerText.trim()))
+          .map(e => e.origin + e.pathname))])
         if (links.length !== 1 || new URL(links[0]).origin !== origem) throw Error('Vínculo de Viso Moema indisponível.')
         await pagina.goto(links[0], { waitUntil: 'domcontentloaded' })
         await pagina.goto(origem + '/intra', { waitUntil: 'domcontentloaded' })
