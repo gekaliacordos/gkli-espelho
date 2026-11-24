@@ -1,4 +1,4 @@
-export function conciliarHflex(arquivos, anterior, captadoEm) {
+export function conciliarHflex(arquivos, anterior, captadoEm, codigoPortal = '0290') {
   const historico = new Map((anterior?.acordos ?? []).map(acordo => [acordo.numero, acordo]))
   const acordos = arquivos.acordos.map(atual => {
     const antigo = historico.get(atual.numero)
@@ -45,6 +45,6 @@ export function conciliarHflex(arquivos, anterior, captadoEm) {
     cotasEmAcordoNoRelatorio: vinculadas, cotasConciliacaoPendente: pendentes,
     fonteCotas: 'HFlex · Devedores Detalhado (XLS)', fonteAcordos: 'HFlex · Acordos Sintético (XLS)',
     conferenciaCotasAcordos: { ...arquivos.hashes, recibosEmAmbos: vinculadas.length, pendentes: pendentes.length },
-    cobertura: `Empreendimento 0290. ${arquivos.cotas.length} recibos no relatório de devedores, ${vinculadas.length} vinculados a acordos e ${pendentes.length} pendentes de conferência. Quando disponível, o detalhamento anterior por recibo é mantido. Cadastro integral e responsáveis não conferidos.`,
+    cobertura: `Empreendimento ${codigoPortal}. ${arquivos.cotas.length} recibos no relatório de devedores, ${vinculadas.length} vinculados a acordos e ${pendentes.length} pendentes de conferência. Quando disponível, o detalhamento anterior por recibo é mantido. Cadastro integral e responsáveis não conferidos.`,
   }
 }

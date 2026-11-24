@@ -8,16 +8,17 @@ const acordos = '/Operacional/Empreendimento/Emp_BoletoAcordolista.aspx?menu=MKv
 const prazo = 180_000
 const filtro = '#body_ucFiltroRelatorioDevedores_'
 
-async function selecionarRioNegro(page) {
+async function selecionarEmpreendimento(page, alvo) {
   await page.goto(origem + acordos, { waitUntil: 'domcontentloaded' })
   const empreendimento = page.locator('#tbNmEmpreendimento')
-  await empreendimento.fill('0290')
+  await empreendimento.fill(alvo.codigoPortal)
   await empreendimento.press('Enter')
-  await page.waitForFunction(() => {
+  await page.waitForFunction(({ codigoPortal, nomePortal }) => {
     const texto = document.querySelector('#tbNmEmpreendimento')?.value ?? ''
     const selecionado = document.querySelector('#ddEmpreendimento')?.selectedOptions[0]?.text ?? ''
-    return /0290.*RIO NEGRO/i.test(texto) && /0290.*RIO NEGRO/i.test(selecionado)
-  }, null, { timeout: 30_000 })
+    const prefixo = codigoPortal + ' - ' + nomePortal
+    return texto.trim() === prefixo && selecionado.trim() === prefixo
+  }, alvo, { timeout: 30_000 })
 
   // A busca preenche a seleção visual. A abertura do Home grava o empreendimento na sessão.
   const home = page.waitForURL(url => url.origin === origem &&
@@ -28,10 +29,10 @@ async function selecionarRioNegro(page) {
   await page.waitForLoadState('domcontentloaded')
 }
 
-async function abrirRelatorio(page, rota) {
+async function abrirRelatorio(page, rota, alvo) {
   await page.goto(origem + rota, { waitUntil: 'domcontentloaded' })
-  await page.waitForFunction(() => [...(document.querySelector('#ddBlocoMaster')?.options ?? [])]
-    .some(b => /RIO NEGRO/i.test(b.textContent)), null, { timeout: 30_000 })
+  await page.waitForFunction(bloco => [...(document.querySelector('#ddBlocoMaster')?.options ?? [])]
+    .some(b => b.textContent.trim().endsWith(' - ' + bloco)), alvo.bloco, { timeout: 30_000 })
 }
 
 async function validarXls(download, caminho) {
@@ -49,7 +50,7 @@ async function validarXls(download, caminho) {
   }
 }
 
-async function exportarXls(page, botao, caminho, rota, titulo) {
+async function exportarXls(page, botao, caminho, rota, titulo, alvo) {
   const context = page.context()
   const downloads = []
   const ouvintes = new Set()
@@ -84,8 +85,8 @@ async function exportarXls(page, botao, caminho, rota, titulo) {
             const seletor = '#btRelatorioExcel'
             const baixar = frame.locator(seletor).first()
             if (!await baixar.isVisible() || !await frame.getByText(titulo).first().isVisible()) continue
-            const identidade = /0290\s*-\s*COND\.\s*ESCRITORIOS RIO NEGRO/i
-            if (!await frame.getByText(identidade).count()) throw Error('O visualizador não identificou o empreendimento 0290.')
+            const identidade = alvo.codigoPortal + ' - ' + alvo.nomePortal
+            if (!await frame.getByText(identidade).count()) throw Error('O visualizador não identificou o empreendimento ' + alvo.codigoPortal + '.')
             if (frame === aba.mainFrame()) {
               await baixar.click()
             } else {
@@ -112,8 +113,8 @@ async function exportarXls(page, botao, caminho, rota, titulo) {
   }
 }
 
-async function configurarAcordos(page) {
-  await abrirRelatorio(page, acordos)
+async function configurarAcordos(page, alvo) {
+  await abrirRelatorio(page, acordos, alvo)
   await page.locator('#body_tbNumeroAcordo').fill('')
   await page.locator('#body_tbDataInicioVencimento').fill('')
   await page.locator('#body_tbDataFinalVencimento').fill('')
@@ -128,7 +129,7 @@ async function configurarAcordos(page) {
   await page.locator('#body_ckExibeAcordoContrato').check()
 }
 
-export async function baixarRelatoriosHflex({ usuario, senha }, caminhos, progresso = () => {}) {
+export async function baixarRelatoriosHflex({ usuario, senha }, caminhos, alvo, progresso = () => {}) {
   if (!usuario || !senha) throw Error('Credenciais do HFlex ausentes.')
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
   try {
@@ -147,17 +148,17 @@ export async function baixarRelatoriosHflex({ usuario, senha }, caminhos, progre
     await page.waitForURL(url => url.origin === origem && url.pathname.startsWith('/Operacional/'))
 
     progresso('relatórios de acordos')
-    await selecionarRioNegro(page)
-    await configurarAcordos(page)
+    await selecionarEmpreendimento(page, alvo)
+    await configurarAcordos(page, alvo)
     progresso('XLS de acordos')
-    await exportarXls(page, '#body_btRelatorioSintetico', caminhos.sintetico, /RelatorioAcordoSintetico/i, /RELATÓRIO DE ACORDOS\s*-\s*SINTÉTICO/i)
+    await exportarXls(page, '#body_btRelatorioSintetico', caminhos.sintetico, /RelatorioAcordoSintetico/i, /RELATÓRIO DE ACORDOS\s*-\s*SINTÉTICO/i, alvo)
     progresso('relatório de devedores')
     const paginaDevedores = await context.newPage()
-    await abrirRelatorio(paginaDevedores, devedores)
+    await abrirRelatorio(paginaDevedores, devedores, alvo)
     // Preserva os dois tipos de recibos. O parser separa os vínculos confirmados.
     for (const id of ['ckAcordo', 'ckSemAcordo', 'ckPDF']) await paginaDevedores.locator(filtro + id).setChecked(false)
     for (const id of ['cbValorCorrigido', 'ckExcelCabecalho', 'ckExcel']) await paginaDevedores.locator(filtro + id).setChecked(true)
-    await exportarXls(paginaDevedores, filtro + 'btGeraRelatorioDetalhado', caminhos.devedores, /RelatorioDevedores/i, /DEVEDORES DETALHADO/i)
+    await exportarXls(paginaDevedores, filtro + 'btGeraRelatorioDetalhado', caminhos.devedores, /RelatorioDevedores/i, /DEVEDORES DETALHADO/i, alvo)
   } finally {
     await browser.close()
   }

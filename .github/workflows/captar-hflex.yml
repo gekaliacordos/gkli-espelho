@@ -22,9 +22,15 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm ci
-      - run: npx playwright install --with-deps chrome
-      - run: npm run captar:hflex
-        env:
+      - id: preparar_chrome
+        run: npx playwright install --with-deps chrome
+      - name: Captar Escritório Rio Negro
+        run: npm run captar:hflex -- hflex
+        env: &hflex-env
           ESPELHO_PORTAL_USUARIO: ${{ secrets.AGENTE_HFLEX_USUARIO }}
           ESPELHO_PORTAL_SENHA: ${{ secrets.AGENTE_HFLEX_SENHA }}
           ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_DATABASE_URL }}
+      - name: Captar Office Tamboré
+        if: ${{ !cancelled() && steps.preparar_chrome.outcome == 'success' }}
+        run: npm run captar:hflex -- hflex-5987
+        env: *hflex-env

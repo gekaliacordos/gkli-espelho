@@ -49,6 +49,7 @@ def abrir_xls(arg):
     grade.feed(conteudo.decode('utf-8-sig'))
     return grade.linhas, hashlib.sha256(conteudo).hexdigest()
 
+bloco = sys.argv[3] if len(sys.argv) > 3 else 'RIO NEGRO'
 sintetico, hash_sintetico = abrir_xls(sys.argv[1])
 assert any(len(r) == 18 and r[4] == 'Nº Acordo' for r in sintetico)
 acordos = {}
@@ -56,7 +57,7 @@ for r in sintetico:
     if len(r) != 18 or not r[4].isdigit():
         continue
     numero = r[4]
-    assert numero not in acordos and ((r[0] == 'RIO NEGRO' and r[1].isdigit()) or (not r[1] and r[3].isdigit()))
+    assert numero not in acordos and ((r[0] == bloco and r[1].isdigit()) or (not r[1] and r[3].isdigit()))
     total, recebido = centavos(r[16]), centavos(r[17])
     acordos[numero] = dict(numero=numero, unidade=r[1] or 'Contrato ' + r[3],
         dataPosicao=data(r[6]), principal=centavos(r[9]), total=total, recebido=recebido, saldo=total-recebido)
@@ -76,7 +77,7 @@ def conferir(r, lista):
     assert centavos(r[-1]) == sum(c['valores'][-1] for c in lista)
 
 for r in devedores:
-    if len(r) >= 3 and r[0] == 'RIO NEGRO' and re.fullmatch(r'\d{6}', r[1]):
+    if len(r) >= 3 and r[0] == bloco and re.fullmatch(r'\d{6}', r[1]):
         assert unidade is None and not geral
         unidade = r[1]
         unidades.add(unidade)
@@ -86,7 +87,7 @@ for r in devedores:
         conferir(r, sub)
         unidade, sub = None, []
         continue
-    if r[0] == 'RESUMO DO BLOCO RIO NEGRO':
+    if r[0] == 'RESUMO DO BLOCO ' + bloco:
         assert unidade is None and not geral
         conferir(r, cotas)
         geral = True
