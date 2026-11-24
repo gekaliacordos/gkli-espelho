@@ -23,12 +23,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: captar-lello
+  group: captar-portal-lello
 
 jobs:
   captar:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
