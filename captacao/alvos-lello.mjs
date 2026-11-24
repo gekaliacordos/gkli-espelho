@@ -6,6 +6,6 @@ export const alvosLello = [
   { nome: 'Inspire Mauá Sonhos', busca: 'Inspire', codigo: '1637', perfil: 'PADRAO' },
   { nome: 'Follow – The Eureka Building', busca: 'Follow', codigo: '62430', perfil: 'PADRAO' },
   { nome: 'Harmonia Morumbi', busca: 'Harmonia Morumbi', codigo: '8334', perfil: 'PADRAO' },
-  { nome: 'Co.Next Liberdade', busca: 'Liberdade', codigo: '62905', perfil: 'CONEXT' },
+  { nome: 'Co.Next Liberdade', busca: 'Liberdade', codigo: '62905', perfil: 'PADRAO' },
   { nome: 'VN Casa Topázio', busca: 'Topazio', codigo: '8759', perfil: 'TOPAZIO' },
 ]

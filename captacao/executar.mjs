@@ -44,7 +44,18 @@ export async function executarAlvos(alvos, env, log = console.log) {
         })
       } catch (erro) {
         falhas++
-        const motivo = erro.code === 'SCANNER_AUTH_RECUSADA' ? 'Acesso recusado ou exige verificação humana.'
+        const mensagemPortal = new Set([
+          'Índice de cotas, acordos ou pagamentos incompleto.',
+          'A ausência de acordos ativos não foi confirmada no relatório.',
+          'Detalhamento de cotas diverge do total da Lello.',
+          'Unidade do histórico não confirmada.',
+          'Identidade do acordo não confirmada.',
+          'A composição do acordo não foi confirmada.',
+          'Sessão da Lello expirada durante a coleta.',
+          'Condomínio do portal diverge do cadastro.',
+        ])
+        const motivo = mensagemPortal.has(erro.message) ? erro.message
+          : erro.code === 'SCANNER_AUTH_RECUSADA' ? 'Acesso recusado ou exige verificação humana.'
           : erro.constructor.name === 'FalhaTemporariaLello' ? 'Portal temporariamente indisponível.'
           : 'Confira o portal e a configuração.'
         log(alvo.nome + ' · falhou na ' + etapa + '. ' + motivo)
