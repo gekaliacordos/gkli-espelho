@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { Client } from 'pg'
 import { coletarEspelhoLello } from './lello.mjs'
 
@@ -8,12 +9,16 @@ const nome = 'Safira'
 try {
   if (!ESPELHO_DATABASE_URL) throw new Error('Configure ESPELHO_DATABASE_URL.')
   if (!usuario || !senha) throw new Error('Configure as credenciais Lello do Safira.')
-  if (!new URL(ESPELHO_DATABASE_URL).username.endsWith('jrctpldzavctwaqiepul') &&
-      new URL(ESPELHO_DATABASE_URL).hostname !== 'db.jrctpldzavctwaqiepul.supabase.co') {
-    throw new Error('O banco de destino precisa ser o Supabase do GKLI Espelho.')
+  const destino = new URL(ESPELHO_DATABASE_URL)
+  const direto = destino.hostname === 'db.jrctpldzavctwaqiepul.supabase.co'
+  const pooler = destino.hostname === 'aws-1-us-east-1.pooler.supabase.com'
+    && destino.username.endsWith('.jrctpldzavctwaqiepul')
+  if (destino.protocol !== 'postgresql:' || (!direto && !pooler) || destino.search) {
+    throw new Error('Informe a URL Postgres do GKLI Espelho sem parâmetros de conexão.')
   }
 
-  const banco = new Client({ connectionString: ESPELHO_DATABASE_URL, connectionTimeoutMillis: 15000 })
+  const ca = await readFile(new URL('../supabase/prod-ca-2021.crt', import.meta.url), 'utf8')
+  const banco = new Client({ connectionString: destino.href, ssl: { ca }, connectionTimeoutMillis: 15000 })
   await banco.connect()
   try {
     const captura = await coletarEspelhoLello({ codigo, nome, usuario, senha }, AbortSignal.timeout(25 * 60_000), console.log)
