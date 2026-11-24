@@ -1,0 +1,63 @@
+name: Captar administradoras
+on:
+  workflow_dispatch:
+    inputs:
+      administradora:
+        description: Administradora a captar
+        type: choice
+        default: todas
+        options:
+          - todas
+          - hflex
+          - lello
+          - bbz
+          - manager
+          - graiche
+          - habitacional
+          - oma
+          - atipass
+          - villagua
+      condominio:
+        description: Código interno opcional para testar um condomínio (exceto no HFlex)
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: captar-administradoras
+
+jobs:
+  hflex:
+    if: inputs.administradora == 'todas' || inputs.administradora == 'hflex'
+    uses: ./.github/workflows/captar-hflex.yml
+    secrets:
+      AGENTE_HFLEX_USUARIO: ${{ secrets.AGENTE_HFLEX_USUARIO }}
+      AGENTE_HFLEX_SENHA: ${{ secrets.AGENTE_HFLEX_SENHA }}
+      ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_DATABASE_URL }}
+  captar:
+    if: inputs.administradora != 'hflex'
+    strategy:
+      fail-fast: false
+      matrix:
+        portal: ${{ fromJSON(inputs.administradora == 'todas' && '["lello","bbz","manager","graiche","habitacional","oma","atipass","villagua"]' || format('["{0}"]', inputs.administradora)) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chrome
+      - name: Captar e gravar no Supabase
+        run: |
+          if [ "$SELECAO" = "todas" ]; then CONDOMINIO=""; fi
+          node captacao/executar-nuvem.mjs "$PORTAL" "$CONDOMINIO"
+        env:
+          PORTAL: ${{ matrix.portal }}
+          SELECAO: ${{ inputs.administradora }}
+          CONDOMINIO: ${{ inputs.condominio }}
+          ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_COLETORES_DATABASE_URL }}
+          ESPELHO_PORTAL_CONFIG: ${{ toJSON(fromJSON(secrets.ESPELHO_PORTAIS || '{}')[matrix.portal]) }}

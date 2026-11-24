@@ -1,6 +1,14 @@
 name: Captar HFlex
 on:
   workflow_dispatch:
+  workflow_call:
+    secrets:
+      AGENTE_HFLEX_USUARIO:
+        required: true
+      AGENTE_HFLEX_SENHA:
+        required: true
+      ESPELHO_DATABASE_URL:
+        required: true
 
 permissions:
   contents: read

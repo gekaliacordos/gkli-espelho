@@ -25,8 +25,8 @@ export function lerAcordosWebware(paginas) {
       if (totalGeral) throw new Error('Há linhas após o total geral da grade.')
       if (linha[0] === '(=) Total Geral') {
         const somar = campo => acordosPagina.reduce((soma, acordo) => soma + (acordo[campo] ?? 0), 0)
-        if (centavos(linha[1]) !== somar('total') || centavos(linha[3]) !== somar('recebido')
-          || centavos(linha[4]) !== somar('saldo')) throw new Error('Totais da página divergem do portal.')
+        if (centavos(linha[1]) !== somar('total') || (valorOpcional(linha[3]) ?? 0) !== somar('recebido')
+          || (valorOpcional(linha[4]) ?? 0) !== somar('saldo')) throw new Error('Totais da página divergem do portal.')
         totalGeral = true
       } else if (linha[0] === '(=) Total') {
         if (!atual) throw new Error('Subtotal de acordo sem processo.')
@@ -62,7 +62,7 @@ export function lerAcordosWebware(paginas) {
           throw new Error('Linha desconhecida na grade de acordos.')
         }
         const [parcela, vencimento, valor, pagamento, recebido] = campos
-        if (!/^\d+\/\d+$/.test(parcela) || atual.parcelas.some(item => item.numero === parcela)) {
+        if (!/^(?:\d+\/\d+|ENTRADA|Saldo Residual|(?:\d+º\s+)?BLOQ\. JUD)$/i.test(parcela) || atual.parcelas.some(item => item.numero === parcela)) {
           throw new Error('Identificador de parcela inválido ou repetido.')
         }
         atual.parcelas.push({ numero: parcela, vencimento: dataIso(vencimento), valor: centavos(valor),
