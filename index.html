@@ -27,6 +27,7 @@
     .catalog-record { display: grid; gap: .35rem .8rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
     .catalog-record dt { font-weight: 600; overflow-wrap: anywhere; }
     .catalog-record dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .access-details { white-space: pre-wrap; overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
@@ -81,11 +82,95 @@
       destino.append(detalhes);
     }
 
+    const rotulosAcesso = {
+      cadastrado: "Acesso cadastrado",
+      sem_acesso: "Sem acesso",
+      nao_verificado: "Não verificado",
+    };
+
+    function montarAcesso(id, acesso, ficha, token) {
+      const bloco = document.createElement("div");
+      const situacao = document.createElement("p");
+      situacao.textContent = "Acesso ao portal · " + (rotulosAcesso[acesso?.situacao] ?? "Não verificado");
+      bloco.append(situacao);
+
+      if (acesso?.administradora) {
+        const adm = document.createElement("p");
+        adm.textContent = "Administradora na planilha · " + acesso.administradora;
+        bloco.append(adm);
+      }
+
+      if (acesso?.portal) {
+        const portal = document.createElement("p");
+        portal.textContent = "Portal · ";
+        let url;
+        try { url = new URL(acesso.portal); } catch {}
+        if (url && ["https:", "http:"].includes(url.protocol) && !url.username && !url.password) {
+          const link = document.createElement("a");
+          link.href = url.href;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = url.hostname;
+          portal.append(link);
+        } else {
+          portal.append(acesso.portal);
+        }
+        bloco.append(portal);
+      }
+
+      if (acesso?.situacao === "cadastrado") {
+        const botao = document.createElement("button");
+        botao.type = "button";
+        botao.textContent = "Mostrar dados de acesso";
+        const dados = document.createElement("p");
+        dados.className = "access-details";
+        dados.setAttribute("role", "status");
+        let exibindo = false;
+        const ocultar = () => {
+          exibindo = false;
+          dados.textContent = "";
+          botao.textContent = "Mostrar dados de acesso";
+        };
+        ficha.addEventListener("toggle", () => { if (!ficha.open) ocultar(); });
+        botao.addEventListener("click", async () => {
+          if (exibindo) {
+            ocultar();
+            return;
+          }
+          botao.disabled = true;
+          dados.textContent = "Consultando…";
+          try {
+            const params = new URLSearchParams({ select: "credenciais", condominio_id: "eq." + id });
+            const response = await fetch(new URL("/rest/v1/condominio_acessos?" + params, authUrl), {
+              headers: { apikey: apiKey, Authorization: "Bearer " + token },
+              cache: "no-store",
+              signal: AbortSignal.timeout(15000),
+            });
+            if (!response.ok) throw new Error("Consulta indisponível");
+            const [registro] = await response.json();
+            if (token !== accessToken || !ficha.open || ficha.hidden) {
+              ocultar();
+              return;
+            }
+            dados.textContent = registro?.credenciais || "Dados de acesso indisponíveis.";
+            exibindo = true;
+            botao.textContent = "Ocultar dados de acesso";
+          } catch {
+            if (token === accessToken && ficha.open && !ficha.hidden) dados.textContent = "Não foi possível consultar os dados de acesso.";
+          } finally {
+            botao.disabled = false;
+          }
+        });
+        bloco.append(botao, dados);
+      }
+      return bloco;
+    }
+
     async function mostrarCadastro(token) {
       catalog.textContent = "Consultando o cadastro de condomínios…";
       try {
         const query = new URLSearchParams({
-          select: "nome,administradora,status,cadastro", order: "nome.asc,id.asc",
+          select: "id,nome,administradora,status,cadastro,condominio_acessos(situacao,administradora,portal)", order: "nome.asc,id.asc",
         });
         const response = await fetch(new URL("/rest/v1/condominios?" + query, authUrl), {
           headers: { apikey: apiKey, Authorization: "Bearer " + token },
@@ -110,10 +195,10 @@
         catalog.replaceChildren(titulo, rotulo, filtro, contagem, lista);
 
         const normalizar = texto => texto.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
-        for (const { nome, administradora, status, cadastro } of registros) {
+        for (const { id, nome, administradora, status, cadastro, condominio_acessos: acesso } of registros) {
           const ficha = document.createElement("details");
           const resumo = document.createElement("summary");
-          resumo.textContent = [nome, administradora, status].filter(Boolean).join(" · ");
+          resumo.textContent = [nome, administradora, status, rotulosAcesso[acesso?.situacao] ?? "Não verificado"].filter(Boolean).join(" · ");
           ficha.append(resumo);
           ficha.addEventListener("toggle", () => {
             if (!ficha.open || ficha.querySelector("dl")) return;
@@ -128,7 +213,7 @@
               valor.textContent = cadastro[chave] || "—";
               campos.append(termo, valor);
             }
-            ficha.append(campos);
+            ficha.append(montarAcesso(id, acesso, ficha, token), campos);
           });
           const cnpj = cadastro.cnpj ?? "";
           ficha.dataset.status = normalizar(status ?? "");
@@ -144,7 +229,8 @@
             ficha.hidden = ["ativo", "inativo"].includes(busca)
               ? ficha.dataset.status !== busca
               : !ficha.dataset.busca.includes(busca);
-            if (!ficha.hidden) total++;
+            if (ficha.hidden) ficha.open = false;
+            else total++;
           }
           contagem.textContent = total + " de " + registros.length + " condomínios";
         }
