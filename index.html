@@ -81,6 +81,10 @@
     #simulador label:has(input) { display: flex; align-items: baseline; gap: .45rem; }
     #simulador input[type="checkbox"] { width: auto; margin: .35rem 0; }
     #simulacao-revisao:not(:empty) { border-top: 1px solid #d5dce6; margin-top: 1rem; }
+    .simulacao-compartilhar { margin-top: 1rem; }
+    .simulacao-compartilhar textarea { display: block; width: 100%; margin-top: .5rem;
+      padding: .65rem; border: 1px solid #8190a4; border-radius: .45rem; font: inherit; resize: vertical; }
+    .simulacao-compartilhar [role="status"]:empty { display: none; }
     .access-details { white-space: pre-wrap; overflow-wrap: anywhere; }
   </style>
 </head>
@@ -358,6 +362,38 @@
     const statusSim = document.querySelector("#simulacao-status");
     const formatarCentavos = valor => moeda.format(valor / 100);
 
+    function compartilharSimulacao(texto) {
+      const area = document.createElement("div");
+      area.className = "simulacao-compartilhar";
+      const botao = document.createElement("button");
+      botao.type = "button";
+      botao.textContent = "Copiar texto da administradora";
+      const feedback = document.createElement("p");
+      feedback.setAttribute("role", "status");
+      const detalhes = document.createElement("details");
+      const resumo = document.createElement("summary");
+      resumo.textContent = "Ver texto para a administradora";
+      const campo = document.createElement("textarea");
+      campo.readOnly = true;
+      campo.rows = 8;
+      campo.value = texto;
+      campo.setAttribute("aria-label", "Texto para a administradora");
+      detalhes.append(resumo, campo);
+      botao.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(texto);
+          feedback.textContent = "Texto copiado.";
+        } catch {
+          detalhes.open = true;
+          campo.focus();
+          campo.select();
+          feedback.textContent = "Copie manualmente o texto selecionado.";
+        }
+      });
+      area.append(botao, feedback, detalhes);
+      return area;
+    }
+
     function preencherOpcoes(select, itens) {
       select.replaceChildren(...itens.map(([valor, texto]) => new Option(texto, valor)));
       select.disabled = !itens.length;
@@ -499,10 +535,11 @@
           titulo.textContent = "Confira a simulação";
           const valores = document.createElement("dl");
           valores.className = "catalog-record";
-          for (const [nome, valor] of [
+          const resumo = [
             ["Cotas selecionadas", previa.base], ["Despesa de cobrança (" + percentual + "%)", previa.despesa],
             ["Juros do parcelamento", previa.juros], ["Emissão de boletos", previa.boletos], ["Total", previa.total],
-          ]) {
+          ];
+          for (const [nome, valor] of resumo) {
             const termo = document.createElement("dt");
             const detalhe = document.createElement("dd");
             termo.textContent = nome;
@@ -510,12 +547,29 @@
             valores.append(termo, detalhe);
           }
           const plano = document.createElement("ol");
-          previa.parcelas.forEach(parcela => {
+          const parcelas = previa.parcelas.map(parcela =>
+            dataCurta(parcela.vencimento) + " · " + formatarCentavos(parcela.valor));
+          for (const parcela of parcelas) {
             const item = document.createElement("li");
-            item.textContent = dataCurta(parcela.vencimento) + " · " + formatarCentavos(parcela.valor);
+            item.textContent = parcela;
             plano.append(item);
-          });
-          revisaoSim.replaceChildren(titulo, valores, plano);
+          }
+          const texto = [
+            "Prezados, segue a simulação do acordo para conferência.",
+            "",
+            "Administradora: " + admSim.value,
+            "Condomínio: " + condominioSim.selectedOptions[0].textContent,
+            "Unidade: " + unidadeSim.value,
+            "",
+            "Cotas selecionadas:",
+            ...escolhidas.map(cota => ["Recibo " + cota.recibo, dataCurta(cota.vencimento), formatarCentavos(cota.valor)].join(" · ")),
+            "",
+            ...resumo.map(([nome, valor]) => nome + ": " + formatarCentavos(valor)),
+            "",
+            "Plano de pagamento:",
+            ...parcelas.map((parcela, indice) => "Parcela " + (indice + 1) + " · " + parcela),
+          ].join("\n");
+          revisaoSim.replaceChildren(titulo, valores, plano, compartilharSimulacao(texto));
         };
       } catch {
         if (token !== accessToken) return;
