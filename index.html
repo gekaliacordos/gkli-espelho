@@ -78,6 +78,11 @@
               </div>
             </div>
             <p id="simulacao-status" role="status" hidden></p>
+            <details id="simulacao-editar-cotas" hidden>
+              <summary>Editar valores das cotas</summary>
+              <div id="simulacao-valores-cotas"></div>
+              <p id="simulacao-erro-cotas" class="simulacao-nota" role="alert" hidden></p>
+            </details>
             <fieldset id="simulacao-condicoes" disabled>
               <legend>Condições</legend>
               <div class="simulacao-opcoes">
@@ -87,9 +92,19 @@
                 <label>Parcelas
                   <select id="simulacao-parcelas"><option value="1">1x à vista</option><option value="2">2x</option><option value="3">3x</option></select>
                 </label>
+                <label>Primeiro vencimento
+                  <input type="date" id="simulacao-primeiro-vencimento" required>
+                </label>
+                <label id="simulacao-dia-mensal-campo" hidden>Dia das demais parcelas
+                  <select id="simulacao-dia-mensal" disabled>
+                    <option value="">Mesmo dia do primeiro vencimento</option>
+                  </select>
+                </label>
+                <label id="simulacao-isencao" hidden><input type="checkbox" id="simulacao-isentar-regulares" disabled> Isentar parcela vigente</label>
                 <label><input type="checkbox" id="simulacao-juros" disabled> Juros de 1% ao mês (Price)</label>
                 <label><input type="checkbox" id="simulacao-boleto"> <span id="simulacao-boleto-texto">Cobrar boleto</span></label>
               </div>
+              <p id="simulacao-limite-parcelas" class="simulacao-nota" aria-live="polite" hidden></p>
             </fieldset>
             <button id="simulacao-gerar" type="submit" disabled>Simular acordo</button>
           </form>
@@ -109,7 +124,7 @@
     <p id="status-sessao" role="status"></p>
   </main>
   <script type="module">
-    import { agruparCotas, calcularSimulacao, hojeEmSaoPaulo, localizarCadastro, somarDias } from "./simulacao.mjs";
+    import { agruparCotas, calcularSimulacao, dataCivilValida, hojeEmSaoPaulo, lerValorMonetario, localizarCadastro, somarDias, validarParcelasEditadas } from "./simulacao.mjs";
     import { calcularRanking, lerReguaRanking } from "./ranking.mjs";
     const authUrl = "https://jrctpldzavctwaqiepul.supabase.co/auth/v1";
     const apiKey = "sb_publishable_TrF0lI26AdHZ1ksG650lPA_N6JrTYCz";
@@ -337,8 +352,18 @@
     const cotasSim = document.querySelector("#simulacao-cotas");
     const condicoesSim = document.querySelector("#simulacao-condicoes");
     const listaCotas = cotasSim.querySelector("div");
+    const editorCotasSim = document.querySelector("#simulacao-editar-cotas");
+    const valoresCotasSim = document.querySelector("#simulacao-valores-cotas");
+    const erroCotasSim = document.querySelector("#simulacao-erro-cotas");
     const despesaSim = document.querySelector("#simulacao-despesa");
     const parcelasSim = document.querySelector("#simulacao-parcelas");
+    const primeiroVencimentoSim = document.querySelector("#simulacao-primeiro-vencimento");
+    const diaMensalSim = document.querySelector("#simulacao-dia-mensal");
+    const campoDiaMensalSim = document.querySelector("#simulacao-dia-mensal-campo");
+    const limiteParcelasSim = document.querySelector("#simulacao-limite-parcelas");
+    let limiteSemAprovacao = 0;
+    const isencaoSim = document.querySelector("#simulacao-isencao");
+    const isentarRegularesSim = document.querySelector("#simulacao-isentar-regulares");
     const jurosSim = document.querySelector("#simulacao-juros");
     const boletoSim = document.querySelector("#simulacao-boleto");
     const boletoTexto = document.querySelector("#simulacao-boleto-texto");
@@ -346,6 +371,22 @@
     const revisaoSim = document.querySelector("#simulacao-revisao");
     const statusSim = document.querySelector("#simulacao-status");
     const formatarCentavos = valor => moeda.format(valor / 100);
+    const moedaEditavel = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    for (let dia = 1; dia <= 31; dia++) diaMensalSim.append(new Option(String(dia), String(dia)));
+
+    function atualizarCondicoesSim() {
+      const quantidade = Number(parcelasSim.value);
+      campoDiaMensalSim.hidden = quantidade === 1;
+      diaMensalSim.disabled = quantidade === 1;
+      jurosSim.disabled = quantidade === 1;
+      limiteParcelasSim.hidden = !limiteSemAprovacao || condicoesSim.disabled;
+      if (limiteSemAprovacao) {
+        const limite = "Limite sem aprovação do síndico: " + limiteSemAprovacao + " parcela(s).";
+        limiteParcelasSim.textContent = quantidade > limiteSemAprovacao
+          ? limite + " Esta simulação exige aprovação do síndico."
+          : limite;
+      }
+    }
 
     function compartilharSimulacao(texto) {
       const area = document.createElement("div");
@@ -379,6 +420,62 @@
       return area;
     }
 
+    function editorParcelas(parcelas, total, aplicar) {
+      const editor = document.createElement("details");
+      editor.className = "simulacao-editor";
+      const titulo = document.createElement("summary");
+      titulo.textContent = "Editar parcelas";
+      const instrucoes = document.createElement("p");
+      instrucoes.textContent = "Ajuste valores e vencimentos mantendo o total de " + formatarCentavos(total) + ".";
+      const campos = document.createElement("form");
+      const entradas = parcelas.map(({ valor, vencimento }, indice) => {
+        const linha = document.createElement("fieldset");
+        linha.className = "simulacao-edicao-parcela";
+        const legenda = document.createElement("legend");
+        legenda.textContent = "Parcela " + (indice + 1);
+        const rotuloData = document.createElement("label");
+        rotuloData.textContent = "Vencimento";
+        const data = document.createElement("input");
+        data.type = "date";
+        data.required = true;
+        data.value = vencimento;
+        rotuloData.append(data);
+        const rotuloValor = document.createElement("label");
+        rotuloValor.textContent = "Valor (R$)";
+        const dinheiro = document.createElement("input");
+        dinheiro.inputMode = "decimal";
+        dinheiro.required = true;
+        dinheiro.value = moedaEditavel.format(valor / 100);
+        rotuloValor.append(dinheiro);
+        linha.append(legenda, rotuloData, rotuloValor);
+        campos.append(linha);
+        return { data, dinheiro };
+      });
+      const feedback = document.createElement("p");
+      feedback.className = "simulacao-nota";
+      feedback.setAttribute("role", "alert");
+      feedback.hidden = true;
+      const confirmar = document.createElement("button");
+      confirmar.type = "submit";
+      confirmar.textContent = "Aplicar edição à simulação";
+      campos.append(feedback, confirmar);
+      campos.addEventListener("submit", evento => {
+        evento.preventDefault();
+        const alteradas = entradas.map(({ data, dinheiro }) => ({
+          vencimento: data.value, valor: lerValorMonetario(dinheiro.value),
+        }));
+        const erro = validarParcelasEditadas(alteradas, total);
+        if (erro) {
+          feedback.hidden = false;
+          feedback.textContent = erro;
+        } else {
+          aplicar(alteradas);
+        }
+      });
+      editor.append(titulo, instrucoes, campos);
+      return editor;
+    }
+
     function preencherOpcoes(select, itens) {
       select.replaceChildren(...itens.map(([valor, texto]) => new Option(texto, valor)));
       select.disabled = !itens.length;
@@ -400,9 +497,17 @@
 
     function limparUnidadeSim() {
       condicoesSim.disabled = true;
+      atualizarCondicoesSim();
+      isencaoSim.hidden = true;
+      isentarRegularesSim.disabled = true;
+      isentarRegularesSim.checked = false;
       const mensagem = document.createElement("p");
       mensagem.textContent = "Selecione a unidade.";
       listaCotas.replaceChildren(mensagem);
+      valoresCotasSim.replaceChildren();
+      editorCotasSim.open = false;
+      editorCotasSim.hidden = true;
+      erroCotasSim.hidden = true;
       revisaoSim.replaceChildren();
       gerarSim.disabled = true;
     }
@@ -433,6 +538,9 @@
           consultaAtual++;
           unidades = new Map();
           custoBoleto = null;
+          limiteSemAprovacao = 0;
+          primeiroVencimentoSim.value = "";
+          diaMensalSim.value = "";
           boletoSim.checked = false;
           preencherOpcoes(unidadeSim, []);
           mostrarStatusSim("");
@@ -462,6 +570,8 @@
             mostrarStatusSim("Confira a régua no cadastro do condomínio.");
             return;
           }
+          const limite = Number(cadastro.parcelas_acordo_sem_aprovacao_sindico);
+          limiteSemAprovacao = Number.isSafeInteger(limite) && limite > 0 ? limite : 0;
           const custo = Number(cadastro.custo_emissao_boleto);
           custoBoleto = cadastro.custo_emissao_boleto != null && cadastro.custo_emissao_boleto !== ""
             && Number.isFinite(custo) && custo >= 0 ? Math.round(custo * 100) : null;
@@ -494,66 +604,130 @@
             caixa.type = "checkbox";
             caixa.value = String(indice);
             caixa.checked = !cota.regular;
+            caixa.toggleAttribute("data-regular", cota.regular);
             const rotulo = document.createElement("label");
             rotulo.append(caixa, [
               "Recibo " + cota.recibo, dataCurta(cota.vencimento),
               cota.regular ? "Regular" : "Dentro da régua", formatarCentavos(cota.valor),
             ].join(" · "));
             listaCotas.append(rotulo);
+
+            const campoValor = document.createElement("label");
+            const identificacao = "Recibo " + cota.recibo + " · " + dataCurta(cota.vencimento);
+            campoValor.textContent = identificacao;
+            const original = document.createElement("small");
+            original.textContent = "Valor captado: " + formatarCentavos(cota.valor);
+            const valor = document.createElement("input");
+            valor.inputMode = "decimal";
+            valor.setAttribute("aria-label", "Valor da cota " + identificacao);
+            valor.value = moedaEditavel.format(cota.valor / 100);
+            campoValor.append(valor, original);
+            valoresCotasSim.append(campoValor);
           });
           condicoesSim.disabled = !cotas.length;
+          if (cotas.length && !primeiroVencimentoSim.value) primeiroVencimentoSim.value = somarDias(hojeEmSaoPaulo(), 7);
+          atualizarCondicoesSim();
+          atualizarEditorCotas();
           gerarSim.disabled = !cotas.length;
         };
 
         formulario.onsubmit = evento => {
           evento.preventDefault();
           const cotas = unidades.get(unidadeSim.value) ?? [];
-          const escolhidas = [...listaCotas.querySelectorAll("input:checked")].map(caixa => cotas[Number(caixa.value)]);
-          if (!escolhidas.length) return;
+          const marcadas = [...listaCotas.querySelectorAll("input:checked")];
+          if (!marcadas.length || !dataCivilValida(primeiroVencimentoSim.value)) return;
+          const entradas = marcadas.map(caixa => valoresCotasSim.children[Number(caixa.value)].querySelector("input"));
+          const escolhidas = marcadas.map((caixa, i) => ({
+            ...cotas[Number(caixa.value)], valor: lerValorMonetario(entradas[i].value),
+          }));
+          const invalida = escolhidas.findIndex(cota => cota.valor === null);
+          if (invalida !== -1) {
+            editorCotasSim.open = true;
+            erroCotasSim.textContent = "Informe um valor positivo e válido para cada cota selecionada.";
+            erroCotasSim.hidden = false;
+            entradas[invalida].focus();
+            return;
+          }
+          const quantidade = Number(parcelasSim.value);
           const percentual = Number(despesaSim.value);
           const previa = calcularSimulacao({
-            cotas: escolhidas, percentual, quantidade: Number(parcelasSim.value), price: jurosSim.checked,
-            boleto: boletoSim.checked ? custoBoleto ?? 0 : 0, primeiroVencimento: somarDias(hojeEmSaoPaulo(), 7),
+            cotas: escolhidas, percentual, quantidade, price: jurosSim.checked,
+            isentarRegulares: isentarRegularesSim.checked,
+            boleto: boletoSim.checked ? custoBoleto ?? 0 : 0,
+            primeiroVencimento: primeiroVencimentoSim.value,
+            diaMensal: quantidade > 1 && diaMensalSim.value ? Number(diaMensalSim.value) : undefined,
           });
-          const titulo = document.createElement("h2");
-          titulo.textContent = "Confira a simulação";
-          const valores = document.createElement("dl");
-          valores.className = "catalog-record";
-          const resumo = [
-            ["Cotas selecionadas", previa.base], ["Despesa de cobrança (" + percentual + "%)", previa.despesa],
-            ["Juros do parcelamento", previa.juros], ["Emissão de boletos", previa.boletos], ["Total", previa.total],
-          ];
-          for (const [nome, valor] of resumo) {
-            const termo = document.createElement("dt");
-            const detalhe = document.createElement("dd");
-            termo.textContent = nome;
-            detalhe.textContent = formatarCentavos(valor);
-            valores.append(termo, detalhe);
+          const avisoAprovacao = limiteSemAprovacao && quantidade > limiteSemAprovacao
+            ? "Esta simulação exige aprovação do síndico. O cadastro permite até " + limiteSemAprovacao + " parcela(s) sem aprovação."
+            : "";
+          function renderizar(parcelas) {
+            const titulo = document.createElement("h2");
+            titulo.textContent = "Confira a simulação";
+            titulo.tabIndex = -1;
+            const valores = document.createElement("dl");
+            valores.className = "catalog-record";
+            const resumo = [
+              ["Cotas selecionadas", previa.base],
+              ...(previa.baseIsenta ? [["Cotas regulares isentas de despesa", previa.baseIsenta]] : []),
+              ["Despesa de cobrança (" + percentual + "%)", previa.despesa],
+              ["Juros do parcelamento", previa.juros], ["Emissão de boletos", previa.boletos], ["Total", previa.total],
+            ];
+            for (const [nome, valor] of resumo) {
+              const termo = document.createElement("dt");
+              const detalhe = document.createElement("dd");
+              termo.textContent = nome;
+              detalhe.textContent = formatarCentavos(valor);
+              valores.append(termo, detalhe);
+            }
+            const plano = document.createElement("ol");
+            const linhasParcelas = parcelas.map(parcela =>
+              dataCurta(parcela.vencimento) + " · " + formatarCentavos(parcela.valor));
+            for (const parcela of linhasParcelas) {
+              const item = document.createElement("li");
+              item.textContent = parcela;
+              plano.append(item);
+            }
+            const texto = [
+              "Prezados, segue a simulação do acordo para conferência.",
+              "",
+              "Administradora: " + admSim.selectedOptions[0].textContent,
+              "Condomínio: " + condominioSim.selectedOptions[0].textContent,
+              "Unidade: " + unidadeSim.value,
+              "",
+              "Cotas selecionadas:",
+              ...escolhidas.map(cota => [
+                "Recibo " + cota.recibo, dataCurta(cota.vencimento), formatarCentavos(cota.valor),
+                cota.regular && previa.baseIsenta ? "Sem despesa de cobrança" : null,
+              ].filter(Boolean).join(" · ")),
+              "",
+              ...resumo.map(([nome, valor]) => nome + ": " + formatarCentavos(valor)),
+              ...(avisoAprovacao ? [avisoAprovacao] : []),
+              "",
+              "Plano de pagamento:",
+              ...linhasParcelas.map((parcela, indice) => "Parcela " + (indice + 1) + " · " + parcela),
+            ].join("\n");
+            const editar = editorParcelas(parcelas, previa.total, alteradas => {
+              renderizar(alteradas);
+              revisaoSim.querySelector("h2").focus();
+            });
+            revisaoSim.replaceChildren(titulo, valores);
+            if (avisoAprovacao) {
+              const aviso = document.createElement("p");
+              aviso.className = "simulacao-nota";
+              aviso.textContent = avisoAprovacao;
+              revisaoSim.append(aviso);
+            }
+            const editarCotas = document.createElement("button");
+            editarCotas.type = "button";
+            editarCotas.className = "simulacao-editar-condicoes";
+            editarCotas.textContent = "Editar cotas e condições";
+            editarCotas.addEventListener("click", () => {
+              editorCotasSim.open = true;
+              valoresCotasSim.querySelector("label:not([hidden]) input")?.focus();
+            });
+            revisaoSim.append(plano, editarCotas, editar, compartilharSimulacao(texto));
           }
-          const plano = document.createElement("ol");
-          const parcelas = previa.parcelas.map(parcela =>
-            dataCurta(parcela.vencimento) + " · " + formatarCentavos(parcela.valor));
-          for (const parcela of parcelas) {
-            const item = document.createElement("li");
-            item.textContent = parcela;
-            plano.append(item);
-          }
-          const texto = [
-            "Prezados, segue a simulação do acordo para conferência.",
-            "",
-            "Administradora: " + admSim.selectedOptions[0].textContent,
-            "Condomínio: " + condominioSim.selectedOptions[0].textContent,
-            "Unidade: " + unidadeSim.value,
-            "",
-            "Cotas selecionadas:",
-            ...escolhidas.map(cota => ["Recibo " + cota.recibo, dataCurta(cota.vencimento), formatarCentavos(cota.valor)].join(" · ")),
-            "",
-            ...resumo.map(([nome, valor]) => nome + ": " + formatarCentavos(valor)),
-            "",
-            "Plano de pagamento:",
-            ...parcelas.map((parcela, indice) => "Parcela " + (indice + 1) + " · " + parcela),
-          ].join("\n");
-          revisaoSim.replaceChildren(titulo, valores, plano, compartilharSimulacao(texto));
+          renderizar(previa.parcelas);
         };
       } catch {
         if (token !== accessToken) return;
@@ -563,9 +737,29 @@
       }
     }
 
+    function atualizarEditorCotas() {
+      const caixas = [...listaCotas.querySelectorAll("input")];
+      [...valoresCotasSim.children].forEach((campo, indice) => {
+        campo.hidden = !caixas[indice].checked;
+        campo.querySelector("input").disabled = campo.hidden;
+      });
+      editorCotasSim.hidden = !caixas.some(caixa => caixa.checked);
+      erroCotasSim.hidden = true;
+    }
+
+    valoresCotasSim.addEventListener("input", () => {
+      revisaoSim.replaceChildren();
+      erroCotasSim.hidden = true;
+    });
+
     formulario.addEventListener("change", () => {
       revisaoSim.replaceChildren();
-      jurosSim.disabled = parcelasSim.value === "1";
+      atualizarCondicoesSim();
+      atualizarEditorCotas();
+      const regularSelecionada = Boolean(listaCotas.querySelector("input[data-regular]:checked"));
+      isencaoSim.hidden = !regularSelecionada;
+      isentarRegularesSim.disabled = !regularSelecionada;
+      if (!regularSelecionada) isentarRegularesSim.checked = false;
       gerarSim.disabled = !listaCotas.querySelector("input:checked");
     });
 

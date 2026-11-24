@@ -388,3 +388,28 @@ li { margin: .4rem 0; overflow-wrap: anywhere; }
   .tabela-ranking tr { break-inside: avoid; }
   .tabela-ranking thead { display: table-header-group; }
 }
+
+.simulacao-opcoes label:has(input[type="date"]),
+.simulacao-opcoes label:has(#simulacao-dia-mensal) { flex-direction: column; align-items: stretch; }
+.simulacao-opcoes input[type="date"] { width: auto; }
+.simulacao-nota { margin: .5rem; color: var(--violeta); }
+.simulacao-editor { margin-top: 1rem; }
+.simulacao-editor button { justify-self: start; }
+.simulacao-edicao-parcela { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
+#simulador .simulacao-edicao-parcela label { display: block; }
+.simulacao-edicao-parcela input { margin-top: .25rem; min-width: 0; }
+
+@media (max-width: 29rem) {
+  .simulacao-edicao-parcela { grid-template-columns: 1fr; }
+  #simulacao-dia-mensal { max-width: min(100%, 15.5rem); }
+}
+
+#simulacao-valores-cotas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .7rem; }
+#simulador #simulacao-valores-cotas label {
+  display: grid; gap: .3rem; align-content: start; min-width: 0;
+  padding: .7rem; border: 1px solid var(--borda); border-radius: .55rem;
+}
+#simulacao-valores-cotas small { color: var(--suave); }
+#simulacao-editar-cotas[open] > summary { margin-bottom: .6rem; }
+.simulacao-editar-condicoes { background: var(--branco); color: var(--petroleo-escuro); border-color: var(--borda); }
+.simulacao-editar-condicoes:hover { background: var(--azul-claro); }

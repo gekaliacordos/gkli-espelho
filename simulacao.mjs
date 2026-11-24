@@ -36,9 +36,15 @@ export function somarDias(inicio, dias) {
   return iso(data)
 }
 
-export function vencimentoMensal(inicio, meses) {
+export function dataCivilValida(valor) {
+  return typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor)
+    && Number.isFinite(dataUtc(valor).getTime()) && iso(dataUtc(valor)) === valor
+}
+
+export function vencimentoMensal(inicio, meses, diaMensal) {
+  if (meses === 0) return inicio
   const data = dataUtc(inicio)
-  const dia = data.getUTCDate()
+  const dia = diaMensal ?? data.getUTCDate()
   data.setUTCDate(1)
   data.setUTCMonth(data.getUTCMonth() + meses)
   const ultimoDia = new Date(Date.UTC(data.getUTCFullYear(), data.getUTCMonth() + 1, 0)).getUTCDate()
@@ -69,9 +75,12 @@ export function agruparCotas(dados, hoje, diasRegua) {
     .filter(([, cotas]) => cotas.some(cota => !cota.regular)))
 }
 
-export function calcularSimulacao({ cotas, percentual, quantidade, price, boleto, primeiroVencimento }) {
+export function calcularSimulacao({ cotas, percentual, quantidade, price, boleto, primeiroVencimento, diaMensal, isentarRegulares = false }) {
   const base = cotas.reduce((soma, cota) => soma + cota.valor, 0)
-  const despesa = Math.round(base * percentual / 100)
+  const baseIsenta = isentarRegulares
+    ? cotas.reduce((soma, cota) => soma + (cota.regular ? cota.valor : 0), 0)
+    : 0
+  const despesa = Math.round((base - baseIsenta) * percentual / 100)
   const comJuros = price && quantidade > 1
   let saldo = base + despesa
   const fator = 1.01 ** quantidade
@@ -80,11 +89,33 @@ export function calcularSimulacao({ cotas, percentual, quantidade, price, boleto
     const juros = comJuros ? Math.round(saldo * 0.01) : 0
     const valor = indice === quantidade - 1 ? saldo + juros : Math.min(prestacao, saldo + juros)
     saldo -= valor - juros
-    return { valor: valor + boleto, juros, vencimento: vencimentoMensal(primeiroVencimento, indice) }
+    return { valor: valor + boleto, juros, vencimento: vencimentoMensal(primeiroVencimento, indice, diaMensal) }
   })
   return {
-    base, despesa, parcelas, boletos: boleto * quantidade,
+    base, baseIsenta, despesa, parcelas, boletos: boleto * quantidade,
     juros: parcelas.reduce((soma, parcela) => soma + parcela.juros, 0),
     total: parcelas.reduce((soma, parcela) => soma + parcela.valor, 0),
   }
+}
+
+export function lerValorMonetario(valor) {
+  const texto = valor.trim()
+  if (!/^(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/.test(texto)) return null
+  const [reais, centavos = ''] = texto.replaceAll('.', '').split(',')
+  const total = Number(reais) * 100 + Number(centavos.padEnd(2, '0'))
+  return Number.isSafeInteger(total) && total > 0 ? total : null
+}
+
+export function validarParcelasEditadas(parcelas, total) {
+  if (parcelas.some(p => !Number.isSafeInteger(p.valor) || p.valor <= 0)) {
+    return 'Informe um valor positivo para cada parcela.'
+  }
+  if (parcelas.some((p, i) => !dataCivilValida(p.vencimento) ||
+    (i > 0 && p.vencimento <= parcelas[i - 1].vencimento))) {
+    return 'Informe vencimentos válidos em ordem crescente.'
+  }
+  if (parcelas.reduce((soma, p) => soma + p.valor, 0) !== total) {
+    return 'A soma das parcelas precisa ser igual ao total da simulação.'
+  }
+  return ''
 }
