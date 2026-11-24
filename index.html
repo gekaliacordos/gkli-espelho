@@ -63,6 +63,7 @@
     const result = document.querySelector("#result");
     const catalog = document.querySelector("#catalog");
     const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+    const dataCurta = iso => iso.split("-").reverse().join("/");
     const dataHora = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
     let accessToken;
 
@@ -344,6 +345,8 @@
             a.unidade, "Acordo " + a.numero, a.situacao, a.total == null ? null : moeda.format(a.total / 100),
             a.parcelas.length + " parcelas", a.cotas ? a.cotas.length + " cotas vinculadas" : null,
             a.saldo == null ? null : "Saldo " + moeda.format(a.saldo / 100),
+            a.periodoNegociado ? "Período negociado " + dataCurta(a.periodoNegociado.inicio) + " a " + dataCurta(a.periodoNegociado.fim) : null,
+            a.cotasAbertasNoPeriodo?.length ? "Recibos em aberto no período (a conferir) " + a.cotasAbertasNoPeriodo.map(cota => cota.recibo).join(", ") : null,
           ].filter(Boolean).join(" · ")));
         }
 

@@ -49,7 +49,12 @@ export function lerAcordosWebware(paginas) {
         let campos
         if (linha.length === 12 && /^\d+$/.test(linha[2])) {
           if (atual || !linha[0] || !linha[1]) throw new Error('Processo sem identidade ou subtotal.')
-          atual = { unidade: linha[0] + '/' + linha[1], numero: linha[2], parcelas: [], cotas: null }
+          const periodo = linha[3].split(/\s+a\s+/i)
+          if (periodo.length !== 2) throw new Error('Período negociado ausente ou inválido.')
+          const [inicio, fim] = periodo.map(dataIso)
+          if (inicio > fim) throw new Error('Período negociado invertido.')
+          atual = { unidade: linha[0] + '/' + linha[1], numero: linha[2], parcelas: [], cotas: null,
+            periodoNegociado: { inicio, fim } }
           campos = linha.slice(5, 10)
         } else if (atual && linha.length === 8 && !linha[0]) {
           campos = linha.slice(1, 6)

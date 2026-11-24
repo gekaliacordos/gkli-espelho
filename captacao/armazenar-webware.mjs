@@ -22,13 +22,31 @@ export async function gravarCotasWebware(banco, portal, config, dados) {
   })
 }
 
+function conferirCotasPorPeriodo(cotas, acordos) {
+  const porUnidade = new Map()
+  for (const cota of cotas) {
+    const unidades = porUnidade.get(cota.unidade) ?? []
+    unidades.push(cota)
+    porUnidade.set(cota.unidade, unidades)
+  }
+  return acordos.map(acordo => {
+    if (!acordo.periodoNegociado) return acordo
+    const { inicio, fim } = acordo.periodoNegociado
+    const candidatas = (porUnidade.get(acordo.unidade) ?? [])
+      .filter(cota => cota.vencimento >= inicio && cota.vencimento <= fim)
+      .map(({ recibo, vencimento }) => ({ recibo, vencimento }))
+    return { ...acordo, cotasAbertasNoPeriodo: candidatas }
+  })
+}
+
 function comAcordos(dados, captacao) {
   if (!captacao) return dados
   return {
     ...dados,
     ...captacao,
+    acordos: conferirCotasPorPeriodo(dados.cotas, captacao.acordos),
     cobertura: (dados.unidadesDoFiltro ? 'Unidades do filtro do portal. ' : 'Unidades do relatório de cotas. ')
-      + 'Cotas em aberto e grade de acordos conferidas. Responsáveis e composição das cotas negociadas ainda não foram conferidos.',
+      + 'Cotas em aberto e grade de acordos conferidas. A coincidência por unidade e período aponta cotas para revisão. A composição por recibo e o cadastro de responsáveis seguem pendentes.',
   }
 }
 
