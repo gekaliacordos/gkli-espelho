@@ -4,114 +4,48 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Entrar | GKLI Espelho</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem;
-      font: 1rem system-ui, sans-serif; background: #f3f5f8; color: #172337; }
-    main { width: min(100%, 45rem); padding: 2rem; border: 1px solid #d5dce6;
-      border-radius: 1rem; background: white; }
-    h1 { margin: 0 0 1.5rem; font-size: 1.75rem; }
-    form:not([hidden]) { display: grid; gap: .6rem; }
-    input, button { font: inherit; padding: .7rem .85rem; border-radius: .45rem; }
-    input { width: 100%; border: 1px solid #8190a4; margin: 0 0 .5rem; }
-    select { display: block; margin: .4rem 0 1rem; max-width: 100%; font: inherit; padding: .5rem; }
-    button { border: 0; background: #244a80; color: white; cursor: pointer; }
-    button:disabled { opacity: .65; cursor: wait; }
-    #status { color: #9b2525; }
-    #status:empty { margin: 0; }
-    .session-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-    #account { min-width: 0; overflow-wrap: anywhere; }
-    .home-cards:not([hidden]) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin-top: 1.5rem; }
-    .home-card { display: flex; flex-direction: column; gap: .45rem; min-height: 7rem; padding: 1rem;
-      border: 1px solid #d5dce6; border-radius: .8rem; background: #f7f9fc; color: #172337; text-align: left; }
-    .home-card:hover { border-color: #244a80; background: #edf3fb; }
-    .home-card strong { color: #244a80; }
-    .home-card span { font-size: .875rem; line-height: 1.4; }
-    .home-card:focus-visible, #voltar-inicio:focus-visible { outline: 2px solid #244a80; outline-offset: 3px; }
-    #voltar-inicio { margin-top: 1rem; background: transparent; color: #244a80; padding-inline: 0; font-weight: 600; }
-    @media (max-width: 38rem) {
-      main { padding: 1.25rem; }
-      .home-cards:not([hidden]) { grid-template-columns: 1fr; }
-      .home-card { min-height: 0; }
-    }
-    #result, #catalog { margin-top: 1.5rem; }
-    details { border-top: 1px solid #d5dce6; padding: .7rem 0; }
-    summary { cursor: pointer; }
-    li { margin: .4rem 0; overflow-wrap: anywhere; }
-    #unit-filter, #catalog-filter { margin: .4rem 0 1rem; }
-    .catalog-record { display: grid; gap: .35rem .8rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
-    .catalog-record dt { font-weight: 600; overflow-wrap: anywhere; }
-    .catalog-record dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
-    main:has(#signed-in > section:not([hidden])) { width: min(100%, 76rem); }
-    #simulador { margin-top: 1.5rem; }
-    #simulacao-form { gap: 1rem; }
-    .simulacao-colunas { display: grid; grid-template-columns: 1fr 1.2fr 1fr 1.45fr; gap: .75rem; }
-    .simulacao-coluna {
-      display: grid; grid-template-rows: auto 1fr; min-width: 0; margin: 0;
-      overflow: hidden; border: 1px solid #d5dce6; border-radius: .7rem; background: #f7f9fc; }
-    .simulacao-coluna > label, .coluna-titulo {
-      padding: .75rem; border-bottom: 1px solid #d5dce6; font-weight: 650; }
-    .simulacao-coluna > select, .simulacao-lista-cotas {
-      width: 100%; height: 15rem; margin: 0; border: 0; border-radius: 0;
-      padding: .35rem; background: white; color: #172337; font-size: .875rem; }
-    .simulacao-coluna > select:disabled { background: #f7f9fc; color: #526379; }
-    .simulacao-coluna option { padding: .4rem; }
-    .simulacao-lista-cotas { overflow: auto; }
-    .colunas-cadastro { grid-template-columns: 1fr 1.2fr 2fr; }
-    .colunas-administradoras { grid-template-columns: 1fr 2fr; margin-top: .75rem; }
-    .coluna-detalhes { padding: .65rem; }
-    .coluna-detalhes p:first-child { margin-top: 0; }
-    .coluna-detalhes .catalog-record { font-size: .8125rem; }
-    .coluna-detalhes button { max-width: 100%; }
-    .colunas-captacao { margin-top: 1rem; }
-    #simulador .simulacao-lista-cotas label { padding: .45rem; border-bottom: 1px solid #e6ebf2; }
-    .simulacao-lista-cotas label:has(input:checked) { background: #edf3fb; }
-    .simulacao-lista-cotas p { padding-inline: .45rem; color: #526379; }
-    #simulacao-status { margin: 0; font-size: .875rem; color: #526379; }
-    .simulacao-opcoes { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; padding: .5rem; }
-    .simulacao-opcoes select { margin-bottom: 0; }
-    #simulacao-gerar { justify-self: start; }
-    @media (max-width: 56rem) {
-      .simulacao-colunas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-    @media (max-width: 29rem) {
-      .simulacao-colunas { grid-template-columns: 1fr; }
-      .simulacao-coluna > select, .simulacao-lista-cotas { height: 9rem; }
-    }
-    #simulador fieldset { border: 1px solid #d5dce6; border-radius: .45rem; margin: 0; min-width: 0; }
-    #simulador label:has(input) { display: flex; align-items: baseline; gap: .45rem; }
-    #simulador input[type="checkbox"] { width: auto; margin: .35rem 0; }
-    #simulacao-revisao:not(:empty) { border-top: 1px solid #d5dce6; margin-top: 1rem; }
-    .simulacao-compartilhar { margin-top: 1rem; }
-    .simulacao-compartilhar textarea { display: block; width: 100%; margin-top: .5rem;
-      padding: .65rem; border: 1px solid #8190a4; border-radius: .45rem; font: inherit; resize: vertical; }
-    .simulacao-compartilhar [role="status"]:empty { display: none; }
-    .access-details { white-space: pre-wrap; overflow-wrap: anywhere; }
-  </style>
+  <link rel="stylesheet" href="./espelho.css">
 </head>
 <body>
   <main>
-    <h1>GKLI Espelho</h1>
-    <form id="login" method="post">
-      <label for="email">E-mail</label>
-      <input id="email" type="email" autocomplete="username" required>
-      <label for="password">Senha</label>
-      <input id="password" type="password" autocomplete="current-password" required>
-      <button id="enter" type="submit" disabled>Entrar</button>
-    </form>
+    <header class="marca">
+      <img src="./assets/gkli-marca.webp" alt="GKLI — Cobrança inteligente" width="145">
+      <span>Espelho</span>
+    </header>
+    <section class="entrada">
+      <div class="entrada-conteudo">
+        <h1>GKLI Espelho</h1>
+        <p>Acesse o cadastro de condomínios, confira captações e simule acordos.</p>
+        <form id="login" method="post">
+          <label for="email">E-mail</label>
+          <input id="email" type="email" autocomplete="username" required>
+          <label for="password">Senha</label>
+          <input id="password" type="password" autocomplete="current-password" required>
+          <button id="enter" type="submit" disabled>Entrar <span aria-hidden="true">→</span></button>
+        </form>
+        <p id="status" role="status"></p>
+      </div>
+      <div class="entrada-foto" aria-hidden="true"></div>
+    </section>
     <section id="signed-in" hidden>
       <div class="session-header">
         <p id="account"></p>
         <button id="exit" type="button">Sair</button>
       </div>
+      <header class="inicio-hero">
+        <h1>GKLI Espelho</h1>
+      </header>
       <nav id="inicio" class="home-cards" aria-label="Áreas do GKLI Espelho">
         <button type="button" class="home-card" data-area="cadastro-area" aria-controls="cadastro-area">
+          <span class="card-icone card-icone-cadastro" aria-hidden="true"></span>
           <strong>Cadastro</strong><span>Consulte condomínios e acessos.</span>
         </button>
         <button type="button" class="home-card" data-area="captacao-area" aria-controls="captacao-area">
+          <span class="card-icone card-icone-captacao" aria-hidden="true"></span>
           <strong>Captação</strong><span>Confira cotas e acordos captados.</span>
         </button>
         <button type="button" class="home-card" data-area="acordo-area" aria-controls="acordo-area">
+          <span class="card-icone card-icone-acordo" aria-hidden="true"></span>
           <strong>Acordo</strong><span>Simule condições de pagamento.</span>
         </button>
       </nav>
@@ -165,7 +99,7 @@
         <div id="catalog"></div>
       </section>
     </section>
-    <p id="status" role="status"></p>
+    <p id="status-sessao" role="status"></p>
   </main>
   <script type="module">
     import { agruparCotas, calcularSimulacao, hojeEmSaoPaulo, localizarCadastro, somarDias } from "./simulacao.mjs";
@@ -179,6 +113,7 @@
     const signedIn = document.querySelector("#signed-in");
     const account = document.querySelector("#account");
     const status = document.querySelector("#status");
+    const statusSessao = document.querySelector("#status-sessao");
     const result = document.querySelector("#result");
     const catalog = document.querySelector("#catalog");
     const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -859,6 +794,7 @@
         }
         const session = await response.json();
         accessToken = session.access_token;
+        statusSessao.textContent = "";
         account.textContent = "Sessão iniciada como " + session.user.email + ".";
         login.hidden = true;
         signedIn.hidden = false;
@@ -886,7 +822,7 @@
 
     exit.addEventListener("click", async () => {
       exit.disabled = true;
-      status.textContent = "";
+      statusSessao.textContent = "";
       try {
         const response = await fetch(authUrl + "/logout?scope=local", {
           method: "POST",
@@ -897,7 +833,7 @@
           throw new Error("Logout failed");
         }
       } catch {
-        status.textContent = "Sessão encerrada nesta página. O servidor não confirmou a saída.";
+        statusSessao.textContent = "Sessão encerrada nesta página. O servidor não confirmou a saída.";
       } finally {
         accessToken = undefined;
         account.textContent = "";
