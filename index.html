@@ -19,7 +19,21 @@
     button:disabled { opacity: .65; cursor: wait; }
     #status { color: #9b2525; }
     #status:empty { margin: 0; }
-    #account { overflow-wrap: anywhere; }
+    .session-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    #account { min-width: 0; overflow-wrap: anywhere; }
+    .home-cards:not([hidden]) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin-top: 1.5rem; }
+    .home-card { display: flex; flex-direction: column; gap: .45rem; min-height: 7rem; padding: 1rem;
+      border: 1px solid #d5dce6; border-radius: .8rem; background: #f7f9fc; color: #172337; text-align: left; }
+    .home-card:hover { border-color: #244a80; background: #edf3fb; }
+    .home-card strong { color: #244a80; }
+    .home-card span { font-size: .875rem; line-height: 1.4; }
+    .home-card:focus-visible, #voltar-inicio:focus-visible { outline: 2px solid #244a80; outline-offset: 3px; }
+    #voltar-inicio { margin-top: 1rem; background: transparent; color: #244a80; padding-inline: 0; font-weight: 600; }
+    @media (max-width: 38rem) {
+      main { padding: 1.25rem; }
+      .home-cards:not([hidden]) { grid-template-columns: 1fr; }
+      .home-card { min-height: 0; }
+    }
     #result, #catalog { margin-top: 1.5rem; }
     details { border-top: 1px solid #d5dce6; padding: .7rem 0; }
     summary { cursor: pointer; }
@@ -47,37 +61,58 @@
       <button id="enter" type="submit" disabled>Entrar</button>
     </form>
     <section id="signed-in" hidden>
-      <p id="account"></p>
-      <button id="exit" type="button">Sair</button>
-      <details id="simulador" hidden>
-        <summary>Simular acordo</summary>
-        <form id="simulacao-form">
-          <label for="simulacao-adm">Administradora</label>
-          <select id="simulacao-adm" required></select>
-          <label for="simulacao-condominio">Condomínio</label>
-          <select id="simulacao-condominio" required disabled></select>
-          <p id="simulacao-status" role="status" hidden></p>
-          <label for="simulacao-unidade">Unidade</label>
-          <select id="simulacao-unidade" required disabled></select>
-          <fieldset id="simulacao-cotas" hidden>
-            <legend>Cotas em aberto</legend>
-            <div></div>
-          </fieldset>
-          <fieldset id="simulacao-condicoes" disabled>
-            <legend>Condições</legend>
-            <label for="simulacao-despesa">Despesa de cobrança</label>
-            <select id="simulacao-despesa"><option value="10">10%</option><option value="20">20%</option></select>
-            <label for="simulacao-parcelas">Parcelas</label>
-            <select id="simulacao-parcelas"><option value="1">1x à vista</option><option value="2">2x</option><option value="3">3x</option></select>
-            <label><input type="checkbox" id="simulacao-juros" disabled> Juros de 1% ao mês (Price)</label>
-            <label><input type="checkbox" id="simulacao-boleto"> <span id="simulacao-boleto-texto">Cobrar boleto</span></label>
-          </fieldset>
-          <button id="simulacao-gerar" type="submit" disabled>Gerar simulação</button>
-        </form>
-        <section id="simulacao-revisao" aria-live="polite"></section>
-      </details>
-      <div id="result" aria-live="polite"></div>
-      <section id="catalog"></section>
+      <div class="session-header">
+        <p id="account"></p>
+        <button id="exit" type="button">Sair</button>
+      </div>
+      <nav id="inicio" class="home-cards" aria-label="Áreas do GKLI Espelho">
+        <button type="button" class="home-card" data-area="cadastro-area" aria-controls="cadastro-area">
+          <strong>Cadastro</strong><span>Consulte condomínios e acessos.</span>
+        </button>
+        <button type="button" class="home-card" data-area="captacao-area" aria-controls="captacao-area">
+          <strong>Captação</strong><span>Confira cotas e acordos captados.</span>
+        </button>
+        <button type="button" class="home-card" data-area="acordo-area" aria-controls="acordo-area">
+          <strong>Acordo</strong><span>Simule condições de pagamento.</span>
+        </button>
+      </nav>
+      <button id="voltar-inicio" type="button" hidden>← Voltar ao início</button>
+      <section id="acordo-area" aria-labelledby="acordo-titulo" tabindex="-1" hidden>
+        <h2 id="acordo-titulo">Simular acordo</h2>
+        <p id="simulador-carregando" role="status">Consultando captações e cadastro…</p>
+        <div id="simulador" hidden>
+          <form id="simulacao-form">
+            <label for="simulacao-adm">Administradora</label>
+            <select id="simulacao-adm" required></select>
+            <label for="simulacao-condominio">Condomínio</label>
+            <select id="simulacao-condominio" required disabled></select>
+            <p id="simulacao-status" role="status" hidden></p>
+            <label for="simulacao-unidade">Unidade</label>
+            <select id="simulacao-unidade" required disabled></select>
+            <fieldset id="simulacao-cotas" hidden>
+              <legend>Cotas em aberto</legend>
+              <div></div>
+            </fieldset>
+            <fieldset id="simulacao-condicoes" disabled>
+              <legend>Condições</legend>
+              <label for="simulacao-despesa">Despesa de cobrança</label>
+              <select id="simulacao-despesa"><option value="10">10%</option><option value="20">20%</option></select>
+              <label for="simulacao-parcelas">Parcelas</label>
+              <select id="simulacao-parcelas"><option value="1">1x à vista</option><option value="2">2x</option><option value="3">3x</option></select>
+              <label><input type="checkbox" id="simulacao-juros" disabled> Juros de 1% ao mês (Price)</label>
+              <label><input type="checkbox" id="simulacao-boleto"> <span id="simulacao-boleto-texto">Cobrar boleto</span></label>
+            </fieldset>
+            <button id="simulacao-gerar" type="submit" disabled>Gerar simulação</button>
+          </form>
+          <section id="simulacao-revisao" aria-live="polite"></section>
+        </div>
+      </section>
+      <section id="captacao-area" aria-label="Captação" tabindex="-1" hidden>
+        <div id="result" aria-live="polite"></div>
+      </section>
+      <section id="cadastro-area" aria-label="Cadastro" tabindex="-1" hidden>
+        <div id="catalog"></div>
+      </section>
     </section>
     <p id="status" role="status"></p>
   </main>
@@ -99,6 +134,32 @@
     const dataCurta = iso => iso.split("-").reverse().join("/");
     const dataHora = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
     let accessToken;
+
+    const inicio = document.querySelector("#inicio");
+    const voltarInicio = document.querySelector("#voltar-inicio");
+    const cards = [...inicio.querySelectorAll("[data-area]")];
+    let cardAtual;
+
+    function mostrarInicio(restaurarFoco = false) {
+      if (cardAtual) document.getElementById(cardAtual.dataset.area).hidden = true;
+      inicio.hidden = false;
+      voltarInicio.hidden = true;
+      if (restaurarFoco) cardAtual?.focus();
+      cardAtual = undefined;
+    }
+
+    for (const card of cards) {
+      card.addEventListener("click", () => {
+        const area = document.getElementById(card.dataset.area);
+        cardAtual = card;
+        inicio.hidden = true;
+        voltarInicio.hidden = false;
+        area.hidden = false;
+        area.focus();
+      });
+    }
+
+    voltarInicio.addEventListener("click", () => mostrarInicio(true));
 
     function listar(destino, titulo, linhas) {
       const detalhes = document.createElement("details");
@@ -223,6 +284,7 @@
     }
 
     const simulador = document.querySelector("#simulador");
+    const simuladorCarregando = document.querySelector("#simulador-carregando");
     const formulario = document.querySelector("#simulacao-form");
     const admSim = document.querySelector("#simulacao-adm");
     const condominioSim = document.querySelector("#simulacao-condominio");
@@ -260,7 +322,7 @@
 
     function limparSimulador() {
       simulador.hidden = true;
-      simulador.open = false;
+      simuladorCarregando.hidden = false;
       formulario.reset();
       for (const seletor of [admSim, condominioSim, unidadeSim]) preencherOpcoes(seletor, []);
       admSim.onchange = condominioSim.onchange = unidadeSim.onchange = formulario.onsubmit = null;
@@ -272,6 +334,7 @@
       try {
         const [captacoes, registros] = await Promise.all([consultaCaptacoes, consultaCadastro]);
         if (token !== accessToken) return;
+        simuladorCarregando.hidden = true;
         simulador.hidden = false;
         const administradoras = [...new Set(captacoes.map(captacao => captacao.administradora).filter(Boolean))]
           .sort((a, b) => a.localeCompare(b, "pt-BR"));
@@ -390,6 +453,7 @@
         };
       } catch {
         if (token !== accessToken) return;
+        simuladorCarregando.hidden = true;
         simulador.hidden = false;
         mostrarStatusSim("Não foi possível carregar as captações e o cadastro para simular.");
       }
@@ -632,6 +696,7 @@
         limparSimulador();
         catalog.textContent = "";
         signedIn.hidden = true;
+        mostrarInicio();
         login.hidden = false;
         exit.disabled = false;
         email.focus();
