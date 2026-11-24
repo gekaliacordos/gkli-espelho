@@ -48,6 +48,10 @@
           <span class="card-icone card-icone-acordo" aria-hidden="true"></span>
           <strong>Acordo</strong><span>Simule condições de pagamento.</span>
         </button>
+        <button type="button" class="home-card" data-area="relatorios-area" aria-controls="relatorios-area">
+          <span class="card-icone card-icone-relatorios" aria-hidden="true"></span>
+          <strong>Relatórios</strong><span>Consulte o ranking de inadimplência.</span>
+        </button>
       </nav>
       <button id="voltar-inicio" type="button" hidden>← Voltar ao início</button>
       <section id="acordo-area" aria-labelledby="acordo-titulo" tabindex="-1" hidden>
@@ -95,6 +99,9 @@
       <section id="captacao-area" aria-label="Captação" tabindex="-1" hidden>
         <div id="result" aria-live="polite"></div>
       </section>
+      <section id="relatorios-area" aria-label="Relatórios" tabindex="-1" hidden>
+        <div id="relatorios"></div>
+      </section>
       <section id="cadastro-area" aria-label="Cadastro" tabindex="-1" hidden>
         <div id="catalog"></div>
       </section>
@@ -103,6 +110,7 @@
   </main>
   <script type="module">
     import { agruparCotas, calcularSimulacao, hojeEmSaoPaulo, localizarCadastro, somarDias } from "./simulacao.mjs";
+    import { calcularRanking, lerReguaRanking } from "./ranking.mjs";
     const authUrl = "https://jrctpldzavctwaqiepul.supabase.co/auth/v1";
     const apiKey = "sb_publishable_TrF0lI26AdHZ1ksG650lPA_N6JrTYCz";
     const login = document.querySelector("#login");
@@ -116,6 +124,7 @@
     const statusSessao = document.querySelector("#status-sessao");
     const result = document.querySelector("#result");
     const catalog = document.querySelector("#catalog");
+    const relatorios = document.querySelector("#relatorios");
     const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
     const dataCurta = iso => iso.split("-").reverse().join("/");
     const dataHora = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
@@ -773,6 +782,171 @@
       ].filter(Boolean).join(" · ")));
     }
 
+    function tabelaRanking(rotulos, linhas) {
+      const tabela = document.createElement("table");
+      tabela.className = "tabela-ranking";
+      const cabecalho = tabela.createTHead().insertRow();
+      for (const rotulo of rotulos) {
+        const celula = document.createElement("th");
+        celula.scope = "col";
+        celula.textContent = rotulo;
+        cabecalho.append(celula);
+      }
+      const corpo = tabela.createTBody();
+      for (const valores of linhas) {
+        const linha = corpo.insertRow();
+        for (const valor of valores) linha.insertCell().textContent = valor;
+      }
+      const quadro = document.createElement("div");
+      quadro.className = "ranking-tabela";
+      quadro.append(tabela);
+      return quadro;
+    }
+
+    function exibirRanking(destino, captura, regua, administradora) {
+      const ranking = calcularRanking(captura, regua);
+      const documento = document.createElement("article");
+      documento.className = "ranking-document";
+      function texto(elemento, tag, conteudo, classe) {
+        const item = document.createElement(tag);
+        if (classe) item.className = classe;
+        item.textContent = conteudo;
+        elemento.append(item);
+        return item;
+      }
+      const capa = document.createElement("header");
+      capa.className = "ranking-capa";
+      const marca = document.createElement("img");
+      marca.src = "./assets/gkli-marca.webp";
+      marca.alt = "GKLI — Cobrança inteligente";
+      marca.width = 126;
+      capa.append(marca);
+      texto(capa, "h2", "Ranking de inadimplência");
+      texto(capa, "p", captura.condominio, "ranking-condominio");
+      texto(capa, "p", administradora + " · Captação de " + dataHora.format(new Date(captura.captado_em)));
+      documento.append(capa);
+
+      const indicadores = document.createElement("dl");
+      indicadores.className = "ranking-indicadores";
+      for (const [rotulo, valor] of [
+        ["Saldo das cotas abertas", formatarCentavos(ranking.saldo)],
+        ["Unidades distintas", ranking.unidades],
+        ["Cotas abertas", ranking.quantidade],
+      ]) {
+        const card = document.createElement("div");
+        texto(card, "dt", rotulo);
+        texto(card, "dd", valor);
+        indicadores.append(card);
+      }
+      documento.append(indicadores);
+      texto(documento, "p", "Faixas calculadas por vencimento na data da captação. A mesma unidade pode aparecer em faixas diferentes. A etapa operacional depende dos registros da cobrança.", "ranking-nota");
+
+      for (const faixa of ranking.blocos) {
+        const secao = document.createElement("section");
+        secao.className = "ranking-secao";
+        secao.classList.toggle("ranking-secao-curta", faixa.linhas.length <= 6);
+        texto(secao, "h3", faixa.nome);
+        texto(secao, "p", [faixa.criterio, faixa.quantidade + " cotas", faixa.linhas.length + " unidades", formatarCentavos(faixa.saldo)].join(" · "));
+        if (faixa.linhas.length) secao.append(tabelaRanking(["Pos.", "Unidade", "Cotas", "1º venc.", "Últ. venc.", "Saldo em aberto"],
+          faixa.linhas.map((linha, indice) => [indice + 1, linha.unidade, linha.quantidade, dataCurta(linha.primeiro), dataCurta(linha.ultimo), formatarCentavos(linha.saldo)])));
+        documento.append(secao);
+      }
+
+      const acordos = document.createElement("section");
+      acordos.className = "ranking-secao";
+      acordos.classList.toggle("ranking-secao-curta", ranking.acordos.length <= 6);
+      texto(acordos, "h3", "Acordos em andamento");
+      if (ranking.acordos.length) {
+        texto(acordos, "p", ranking.acordos.length + " acordo(s) · Saldo informado " + formatarCentavos(ranking.saldoAcordos));
+        acordos.append(tabelaRanking(["Unidade", "Nº do acordo", "Recibos vinculados", "Saldo do acordo"],
+          ranking.acordos.map(acordo => [acordo.unidade, String(acordo.numero) + (acordo.judicial ? " · Judicial" : ""),
+            acordo.recibos.size, acordo.saldo == null ? "Não informado" : formatarCentavos(acordo.saldo)])));
+      } else {
+        texto(acordos, "p", "Nenhum acordo em andamento identificado na captação.");
+      }
+      documento.append(acordos);
+
+      const conferencia = document.createElement("section");
+      conferencia.className = "ranking-secao ranking-secao-curta";
+      texto(conferencia, "h3", "Conferência da captação");
+      if (Number.isSafeInteger(ranking.saldoBruto)) texto(conferencia, "p", "Saldo bruto informado pela administradora: " + formatarCentavos(ranking.saldoBruto));
+      texto(conferencia, "p", "Recibos de acordo retirados do ranking: " + ranking.excluidas + " · " + formatarCentavos(ranking.saldoExcluido));
+      if (Number.isSafeInteger(ranking.saldoFonte)) texto(conferencia, "p", "Saldo de cotas abertas na fonte: " + formatarCentavos(ranking.saldoFonte));
+      texto(conferencia, "p", "Saldo de cotas do ranking: " + formatarCentavos(ranking.saldo));
+      if (captura.dados.cobertura) texto(conferencia, "p", captura.dados.cobertura, "ranking-nota");
+      for (const aviso of ranking.avisos) texto(conferencia, "p", aviso, "ranking-aviso");
+      documento.append(conferencia);
+
+      const imprimir = document.createElement("button");
+      imprimir.type = "button";
+      imprimir.className = "ranking-imprimir";
+      imprimir.textContent = "Imprimir / salvar PDF";
+      imprimir.addEventListener("click", () => {
+        const tituloAnterior = document.title;
+        document.title = "Ranking - " + captura.condominio + " - " + ranking.posicao.slice(0, 7);
+        try { window.print(); } finally { document.title = tituloAnterior; }
+      });
+      destino.replaceChildren(imprimir, documento);
+    }
+
+    async function mostrarRelatorios(token, consultaCaptacoes, consultaAdministradoras, consultaCadastro) {
+      relatorios.textContent = "Consultando captações…";
+      try {
+        const [captacoes, administradoras, cadastro] = await Promise.all([consultaCaptacoes, consultaAdministradoras, consultaCadastro]);
+        if (token !== accessToken) return;
+        const relatorio = colunaConsulta("relatorio-tipo", "Relatório");
+        const adm = colunaConsulta("relatorio-adm", "Administradora");
+        const condominio = colunaConsulta("relatorio-condominio", "Condomínio");
+        const conteudo = document.createElement("div");
+        conteudo.className = "relatorio-conteudo";
+        conteudo.setAttribute("aria-live", "polite");
+        montarColunas(relatorios, "Relatórios", "colunas-relatorios", [relatorio, adm, condominio]);
+        relatorios.append(conteudo);
+        opcoesConsulta(relatorio.corpo, [["ranking", "Ranking de inadimplência"]]);
+        opcoesConsulta(adm.corpo, [], "Selecione o relatório");
+        opcoesConsulta(condominio.corpo, [], "Selecione a administradora");
+        let pedido = 0;
+
+        relatorio.corpo.addEventListener("change", () => {
+          pedido++;
+          opcoesConsulta(adm.corpo, opcoesAdministradoras(administradoras));
+          opcoesConsulta(condominio.corpo, [], "Selecione a administradora");
+          conteudo.replaceChildren();
+        });
+        adm.corpo.addEventListener("change", () => {
+          pedido++;
+          conteudo.replaceChildren();
+          opcoesConsulta(condominio.corpo, captacoes.filter(captura => captura.administradora_chave === adm.corpo.value)
+            .map(captura => [String(captura.id), captura.condominio]), "Nenhuma captação disponível");
+        });
+        condominio.corpo.addEventListener("change", async () => {
+          const atual = ++pedido;
+          conteudo.textContent = "Consultando o ranking…";
+          try {
+            const [captura] = await consultarCaptacao(token, condominio.corpo.value);
+            if (token !== accessToken || atual !== pedido) return;
+            if (!captura) {
+              conteudo.textContent = "Captação indisponível.";
+              return;
+            }
+            const referencia = captacoes.find(item => String(item.id) === condominio.corpo.value);
+            const regua = lerReguaRanking(localizarCadastro(referencia ?? captura, cadastro));
+            if (!regua) {
+              conteudo.textContent = "A régua deste condomínio não foi identificada no cadastro. Confira os prazos antes de gerar o ranking.";
+              return;
+            }
+            exibirRanking(conteudo, captura, regua, adm.corpo.selectedOptions[0].textContent);
+          } catch {
+            if (token !== accessToken || atual !== pedido) return;
+            conteudo.textContent = "Não foi possível carregar o ranking. Selecione o condomínio novamente.";
+            condominio.corpo.selectedIndex = -1;
+          }
+        });
+      } catch {
+        if (token === accessToken) relatorios.textContent = "Não foi possível carregar os relatórios.";
+      }
+    }
+
     login.addEventListener("submit", async (event) => {
       event.preventDefault();
       enter.disabled = true;
@@ -811,6 +985,7 @@
         });
         void mostrarSelecaoCaptacao(accessToken, captacoes, administradoras);
         void mostrarCadastro(accessToken, cadastro, administradoras);
+        void mostrarRelatorios(accessToken, captacoes, administradoras, cadastro);
         void prepararSimulador(accessToken, captacoes, cadastro, administradoras);
       } catch {
         status.textContent = "Não foi possível conectar. Tente novamente.";
@@ -840,6 +1015,7 @@
         result.textContent = "";
         limparSimulador();
         catalog.textContent = "";
+        relatorios.textContent = "";
         signedIn.hidden = true;
         mostrarInicio();
         login.hidden = false;
