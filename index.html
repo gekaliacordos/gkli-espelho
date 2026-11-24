@@ -322,6 +322,11 @@
           cobertura.textContent = dados.cobertura;
           painel.append(cobertura);
         }
+        if (dados.acordosCaptadosEm) {
+          const atualizacao = document.createElement("p");
+          atualizacao.textContent = "Acordos captados em " + dataHora.format(new Date(dados.acordosCaptadosEm));
+          painel.append(atualizacao);
+        }
         painel.append(rotulo, filtro, listas);
 
         function mostrarListas() {
@@ -335,9 +340,10 @@
           listar(listas, "Cotas em aberto", dados.cotas.filter(c => corresponde(c.unidade)).map(c =>
             [c.unidade, "Recibo " + c.recibo, c.vencimento, moeda.format(c.valores.at(-1) / 100)].join(" · ")
           ));
-          if (!dados.cobertura || dados.acordos.length) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => [
+          if (!dados.cobertura || dados.acordosCaptadosEm) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => [
             a.unidade, "Acordo " + a.numero, a.situacao, a.total == null ? null : moeda.format(a.total / 100),
-            a.parcelas.length + " parcelas", a.cotas.length + " cotas vinculadas",
+            a.parcelas.length + " parcelas", a.cotas ? a.cotas.length + " cotas vinculadas" : null,
+            a.saldo == null ? null : "Saldo " + moeda.format(a.saldo / 100),
           ].filter(Boolean).join(" · ")));
         }
 

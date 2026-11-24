@@ -10,14 +10,14 @@ function texto(html) {
     }).replace(/\s+/g, ' ').trim()
 }
 
-function centavos(valor) {
+export function centavos(valor) {
   if (!/^-?(?:\d+|\d{1,3}(?:\.\d{3})+),\d{2}$/.test(valor ?? '')) {
     throw new Error('Valor monetário inválido no relatório CondoPro.')
   }
   return Number(valor.replace(/[.,]/g, ''))
 }
 
-function dataIso(valor) {
+export function dataIso(valor) {
   const iso = valor.split('/').reverse().join('-')
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || new Date(iso).toISOString().slice(0, 10) !== iso) {
     throw new Error('Vencimento inválido no relatório CondoPro.')

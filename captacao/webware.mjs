@@ -28,7 +28,7 @@ async function selecionarSessao(context, config) {
   throw new Error('O portal não confirmou a identidade do condomínio e o menu de cotas.')
 }
 
-export async function coletarWebware(portal, { usuario, senha }) {
+export async function comSessaoWebware(portal, { usuario, senha }, visitar) {
   const config = configuracoesWebware[portal]
   if (!config || !usuario || !senha) throw new Error('Configuração ou acesso Webware ausente.')
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
@@ -55,6 +55,14 @@ export async function coletarWebware(portal, { usuario, senha }) {
     else await senhaInput.press('Enter')
 
     page = await selecionarSessao(context, config)
+    return await visitar(page, config)
+  } finally {
+    await browser.close()
+  }
+}
+
+export async function coletarWebware(portal, acesso) {
+  return comSessaoWebware(portal, acesso, async (page, config) => {
     const endereco = new URL('/bin/rt/rtPendentes.asp', page.url())
     const linkCotas = portal === 'sell'
       ? page.getByRole('link', { name: /^cotas\s+pendentes$/i }).first()
@@ -119,7 +127,5 @@ export async function coletarWebware(portal, { usuario, senha }) {
       dados.cobertura = 'Unidades listadas no filtro do portal e cotas em aberto conferidas. Responsáveis e acordos ainda não foram conferidos.'
     }
     return dados
-  } finally {
-    await browser.close()
-  }
+  })
 }

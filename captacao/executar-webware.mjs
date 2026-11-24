@@ -1,4 +1,5 @@
 import { abrirBanco } from './executar.mjs'
+import { gravarCotasWebware } from './armazenar-webware.mjs'
 import { coletarWebware, configuracoesWebware } from './webware.mjs'
 
 const portal = process.argv[2]?.toLowerCase()
@@ -14,9 +15,7 @@ if (!config) {
     })
     const banco = await abrirBanco(process.env.ESPELHO_DATABASE_URL)
     try {
-      await banco.query(`insert into public.captacoes
-        (codigo_condominio, condominio, administradora, captado_em, dados)
-        values ($1, $2, $3, $4, $5)`, [portal, config.nome, config.adm, new Date(), dados])
+      await gravarCotasWebware(banco, portal, config, dados)
     } finally {
       await banco.end()
     }
