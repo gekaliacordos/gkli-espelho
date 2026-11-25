@@ -185,9 +185,10 @@
         <summary>Mensageria</summary>
         <div id="config-opcoes-mensageria"></div>
         <details id="whatsapp-piloto">
-          <summary>WhatsApp Web · Linha GEKALI</summary>
+          <summary>WhatsApp Web</summary>
+          <label>Linha <select aria-label="Linha WhatsApp"></select></label>
           <p role="status"></p>
-          <img alt="QR de pareamento da linha GEKALI" width="240" height="240" hidden>
+          <img alt="QR de pareamento da linha selecionada" width="240" height="240" hidden>
         </details>
       </details>
     </dialog>
@@ -233,15 +234,16 @@
 
     const painelWhatsapp = document.querySelector("#whatsapp-piloto");
     const dialogoGlobal = document.querySelector("#configuracoes");
+    const linhaWhatsapp = painelWhatsapp.querySelector("select");
     const qrWhatsapp = painelWhatsapp.querySelector("img");
     const estadoWhatsapp = painelWhatsapp.querySelector("[role=status]");
     const estadosWhatsapp = {
       aguardando_worker: "Aguardando o worker do Railway.",
       iniciando: "Iniciando o navegador.",
-      aguardando_qr: "Abra Dispositivos conectados no WhatsApp da linha GEKALI.",
+      aguardando_qr: "Abra Dispositivos conectados no WhatsApp da linha selecionada.",
       autenticando: "Validando a sessão.",
-      conectado: "Linha GEKALI conectada em modo somente conexão.",
-      linha_divergente: "A linha conectada não é a linha GEKALI.",
+      conectado: "Linha conectada.",
+      linha_divergente: "O número conectado difere da linha cadastrada.",
       desconectado: "Sessão desconectada.",
     };
     let consultandoWhatsapp = false;
@@ -254,10 +256,17 @@
       const token = accessToken;
       consultandoWhatsapp = true;
       try {
-        const resultado = await consultarEspelho(token, "rpc/whatsapp_piloto_status", {});
+        const linhas = await consultarEspelho(token, "rpc/whatsapp_piloto_status_linhas", {});
         if (token !== accessToken || !dialogoGlobal.open || !painelWhatsapp.open) return;
-        estadoWhatsapp.textContent = estadosWhatsapp[resultado.estado] ?? "Estado indisponível.";
-        if (resultado.qr && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(resultado.qr)) {
+        const selecionada = linhaWhatsapp.value || "gekali";
+        if (linhaWhatsapp.options.length !== linhas.length) {
+          linhaWhatsapp.replaceChildren(...linhas.map(linha =>
+            new Option(linha.nome + " · final " + linha.final, linha.linha)));
+          linhaWhatsapp.value = selecionada;
+        }
+        const resultado = linhas.find(linha => linha.linha === selecionada);
+        estadoWhatsapp.textContent = estadosWhatsapp[resultado?.estado] ?? "Estado indisponível.";
+        if (resultado?.qr && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(resultado.qr)) {
           qrWhatsapp.src = resultado.qr;
           qrWhatsapp.hidden = false;
         } else limparQrWhatsapp();
@@ -268,6 +277,11 @@
         consultandoWhatsapp = false;
       }
     }
+    linhaWhatsapp.addEventListener("change", () => {
+      limparQrWhatsapp();
+      estadoWhatsapp.textContent = "Consultando conexão…";
+      void consultarWhatsapp();
+    });
     painelWhatsapp.addEventListener("toggle", () => {
       if (painelWhatsapp.open) void consultarWhatsapp();
       else limparQrWhatsapp();

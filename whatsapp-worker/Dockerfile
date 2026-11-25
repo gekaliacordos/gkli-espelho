@@ -4,5 +4,5 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true WHATSAPP_CHROME=/usr/bin/chromium WHATSAPP_AUTH
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
-COPY conexao.mjs ./
+COPY conexao.mjs recibo.mjs ./
 CMD ["flock", "--exclusive", "--nonblock", "--no-fork", "/data/espelhar-worker.lock", "node", "conexao.mjs"]

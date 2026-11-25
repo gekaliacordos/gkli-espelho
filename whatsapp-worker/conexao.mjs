@@ -2,12 +2,13 @@ import { stat, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import QRCode from 'qrcode';
 import whatsapp from 'whatsapp-web.js';
+import { enviarComRecibo } from './recibo.mjs';
 
 const {
   WHATSAPP_AUTH_PATH: perfil, WHATSAPP_CHROME: chromium, WHATSAPP_PHONE: numero,
-  ESPELHO_URL, ESPELHO_PUBLIC_KEY, WHATSAPP_PILOTO_KEY,
+  ESPELHO_URL, ESPELHO_PUBLIC_KEY, WHATSAPP_PILOTO_KEY, WHATSAPP_LINHA: linha,
 } = process.env;
-if (!ESPELHO_URL || !ESPELHO_PUBLIC_KEY || !/^[a-f0-9]{64}$/.test(WHATSAPP_PILOTO_KEY ?? '') || !perfil || !chromium || !/^\d{10,15}$/.test(numero ?? '') || !(await stat(perfil)).isDirectory()) {
+if ((linha && !['genske', 'escritorio', 'azevedo', 'riseup'].includes(linha)) || !ESPELHO_URL || !ESPELHO_PUBLIC_KEY || !/^[a-f0-9]{64}$/.test(WHATSAPP_PILOTO_KEY ?? '') || !perfil || !chromium || !/^\d{10,15}$/.test(numero ?? '') || !(await stat(perfil)).isDirectory()) {
   throw new Error('Configure o volume de sessão e o número com DDI antes de iniciar.');
 }
 
@@ -32,10 +33,12 @@ function publicar() {
   publicados = publicados.then(async () => {
     const qr = qrAtual && Date.now() - qrAtual.hora < 20000
       ? await QRCode.toDataURL(qrAtual.valor) : null;
-    const resposta = await fetch(new URL('/rest/v1/rpc/whatsapp_piloto_publicar', ESPELHO_URL), {
+    const rpc = linha ? 'whatsapp_piloto_publicar_linha' : 'whatsapp_piloto_publicar';
+    const origem = linha ? { linha, numero } : {};
+    const resposta = await fetch(new URL('/rest/v1/rpc/' + rpc, ESPELHO_URL), {
       method: 'POST',
       headers: { apikey: ESPELHO_PUBLIC_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chave: WHATSAPP_PILOTO_KEY, estado, qr }),
+      body: JSON.stringify({ chave: WHATSAPP_PILOTO_KEY, estado, qr, ...origem }),
       signal: AbortSignal.timeout(8000),
     });
     if (!resposta.ok) {
@@ -85,11 +88,8 @@ async function processarTesteAutorizado() {
       if (!destino?._serialized) {
         resultado = 'numero_nao_encontrado';
       } else if (!encerrando && estado === 'conectado' && cliente.info?.wid?.user === numero) {
-        const mensagem = await cliente.sendMessage(destino._serialized, teste.mensagem, { sendSeen: false });
-        if (mensagem?.id?._serialized) {
-          comprovante = mensagem.id._serialized;
-          resultado = 'enviado';
-        }
+        comprovante = await enviarComRecibo(cliente, destino._serialized, teste.mensagem);
+        if (comprovante) resultado = 'enviado';
       }
     } catch {
       // Após a reserva, qualquer erro exige conferência e nunca dispara reenvio automático.
@@ -147,7 +147,7 @@ cliente.on('ready', () => {
   }
   void atualizar('conectado');
   console.log('Linha conectada para o piloto.');
-  void conferirTesteIncerto().then(processarTesteAutorizado);
+  if (!linha) void conferirTesteIncerto().then(processarTesteAutorizado);
 });
 cliente.on('auth_failure', () => {
   console.error('Falha na autenticação da sessão.');
