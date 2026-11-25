@@ -33,7 +33,8 @@ function publicar() {
       signal: AbortSignal.timeout(8000),
     });
     if (!resposta.ok) {
-      console.error('Supabase recusou o estado HTTP', resposta.status);
+      const problema = await resposta.json().catch(() => ({}));
+      console.error('Supabase recusou o estado HTTP', resposta.status, /^([0-9A-Z]{5,10})$/.test(problema.code ?? '') ? problema.code : '');
       return;
     }
   }).catch(() => console.error('Falha ao atualizar o estado no Espelhar.'));
@@ -83,6 +84,6 @@ try {
   await publicar();
   await cliente.initialize();
 } catch (erro) {
-  console.error('Falha ao iniciar o navegador.', String(erro?.message ?? '').split('\n').slice(0, 3).join(' '));
+  console.error('Falha ao iniciar o navegador.', String(erro?.message ?? '').split('\n').filter(linha => !linha.includes('dbus') && !linha.includes('https://')).slice(0, 14).join(' '));
   await encerrar(1);
 }
