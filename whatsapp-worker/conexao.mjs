@@ -24,13 +24,7 @@ class ClientePareamento extends whatsapp.Client {
     await this.pupPage.setUserAgent(agente);
   }
 
-  async inject() {
-    await this.pupPage.waitForFunction(() => {
-      try { return Boolean(window.Debug?.VERSION && window.require?.('WAWebSocketModel')?.Socket); }
-      catch { return false; }
-    }, { timeout: 120000 });
-    return super.inject();
-  }
+
 }
 
 const TipoCliente = linha ? ClientePareamento : whatsapp.Client;
