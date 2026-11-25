@@ -15,7 +15,7 @@ const cliente = new whatsapp.Client({
   puppeteer: {
     executablePath: chromium,
     headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   },
 });
 
@@ -32,7 +32,10 @@ function publicar() {
       body: JSON.stringify({ chave: WHATSAPP_PILOTO_KEY, estado, qr }),
       signal: AbortSignal.timeout(8000),
     });
-    if (!resposta.ok) throw new Error();
+    if (!resposta.ok) {
+      console.error('Supabase recusou o estado HTTP', resposta.status);
+      return;
+    }
   }).catch(() => console.error('Falha ao atualizar o estado no Espelhar.'));
   return publicados;
 }
@@ -79,7 +82,7 @@ process.once('SIGINT', () => void encerrar(0));
 try {
   await publicar();
   await cliente.initialize();
-} catch {
-  console.error('Falha ao iniciar o navegador.');
+} catch (erro) {
+  console.error('Falha ao iniciar o navegador.', String(erro?.message ?? '').split('\n').slice(0, 3).join(' '));
   await encerrar(1);
 }
