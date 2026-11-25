@@ -477,6 +477,10 @@ li { margin: .4rem 0; overflow-wrap: anywhere; }
   }
 }
 
+#simulador .simulacao-repasse { display: flex; flex-direction: column; align-items: stretch; gap: .2rem; }
+.simulacao-repasse input { width: 100%; min-width: 0; }
+.simulacao-ajuda { display: block; color: var(--suave); font-weight: 500; }
+.simulacao-ajuda:empty { display: none; }
 .espelhamento-controle {
   display: flex;
   align-items: center;

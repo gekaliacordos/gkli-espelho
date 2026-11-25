@@ -75,12 +75,13 @@ export function agruparCotas(dados, hoje, diasRegua) {
     .filter(([, cotas]) => cotas.some(cota => !cota.regular)))
 }
 
-export function calcularSimulacao({ cotas, percentual, quantidade, price, boleto, primeiroVencimento, diaMensal, isentarRegulares = false }) {
+export function calcularSimulacao({ cotas, percentual, repasse, quantidade, price, boleto, primeiroVencimento, diaMensal, isentarRegulares = false }) {
   const base = cotas.reduce((soma, cota) => soma + cota.valor, 0)
   const baseIsenta = isentarRegulares
     ? cotas.reduce((soma, cota) => soma + (cota.regular ? cota.valor : 0), 0)
     : 0
-  const despesa = Math.round((base - baseIsenta) * percentual / 100)
+  const baseCobravel = base - baseIsenta
+  const despesa = baseCobravel > 0 ? repasse ?? Math.round(baseCobravel * percentual / 100) : 0
   const comJuros = price && quantidade > 1
   let saldo = base + despesa
   const fator = 1.01 ** quantidade
@@ -98,12 +99,12 @@ export function calcularSimulacao({ cotas, percentual, quantidade, price, boleto
   }
 }
 
-export function lerValorMonetario(valor) {
+export function lerValorMonetario(valor, { aceitarZero = false } = {}) {
   const texto = valor.trim()
   if (!/^(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/.test(texto)) return null
   const [reais, centavos = ''] = texto.replaceAll('.', '').split(',')
   const total = Number(reais) * 100 + Number(centavos.padEnd(2, '0'))
-  return Number.isSafeInteger(total) && total > 0 ? total : null
+  return Number.isSafeInteger(total) && (total > 0 || (aceitarZero && total === 0)) ? total : null
 }
 
 export function validarParcelasEditadas(parcelas, total) {

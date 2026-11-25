@@ -88,8 +88,13 @@
               <fieldset id="simulacao-condicoes" disabled>
                 <legend>Condições</legend>
                 <div class="simulacao-opcoes">
-                  <label>Despesa de cobrança
+                  <label>Despesa de cobrança (referência)
                     <select id="simulacao-despesa"><option value="10">10%</option><option value="20">20%</option></select>
+                    <small id="simulacao-repasse-referencia" class="simulacao-ajuda"></small>
+                  </label>
+                  <label class="simulacao-repasse">Repasse atualizado (R$)
+                    <input id="simulacao-repasse" inputmode="decimal" required aria-describedby="simulacao-repasse-ajuda simulacao-repasse-erro">
+                    <small id="simulacao-repasse-ajuda" class="simulacao-ajuda">Em caso de isenção, informe 0,00.</small>
                   </label>
                   <label>Parcelas
                     <select id="simulacao-parcelas"><option value="1">1x à vista</option><option value="2">2x</option><option value="3">3x</option></select>
@@ -106,6 +111,7 @@
                   <label><input type="checkbox" id="simulacao-juros" disabled> Juros de 1% ao mês (Price)</label>
                   <label><input type="checkbox" id="simulacao-boleto"> <span id="simulacao-boleto-texto">Cobrar boleto</span></label>
                 </div>
+                <p id="simulacao-repasse-erro" class="simulacao-nota" role="alert" hidden></p>
                 <p id="simulacao-limite-parcelas" class="simulacao-nota" aria-live="polite" hidden></p>
               </fieldset>
               <button id="simulacao-gerar" type="submit" disabled>Simular acordo</button>
@@ -424,6 +430,9 @@
     const valoresCotasSim = document.querySelector("#simulacao-valores-cotas");
     const erroCotasSim = document.querySelector("#simulacao-erro-cotas");
     const despesaSim = document.querySelector("#simulacao-despesa");
+    const repasseSim = document.querySelector("#simulacao-repasse");
+    const referenciaRepasseSim = document.querySelector("#simulacao-repasse-referencia");
+    const erroRepasseSim = document.querySelector("#simulacao-repasse-erro");
     const parcelasSim = document.querySelector("#simulacao-parcelas");
     const primeiroVencimentoSim = document.querySelector("#simulacao-primeiro-vencimento");
     const diaMensalSim = document.querySelector("#simulacao-dia-mensal");
@@ -441,6 +450,23 @@
     const formatarCentavos = valor => moeda.format(valor / 100);
     const moedaEditavel = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     for (let dia = 1; dia <= 31; dia++) diaMensalSim.append(new Option(String(dia), String(dia)));
+
+    function camposCotasSelecionadas() {
+      return [...listaCotas.querySelectorAll("input:checked")].map(caixa => {
+        const indice = Number(caixa.value);
+        const campo = valoresCotasSim.children[indice].querySelector("input");
+        return { indice, campo, regular: caixa.hasAttribute("data-regular"), valor: lerValorMonetario(campo.value) };
+      });
+    }
+
+    function atualizarReferenciaRepasse() {
+      const cotas = camposCotasSelecionadas();
+      const base = cotas.reduce((soma, { regular, valor }) =>
+        soma + (regular && isentarRegularesSim.checked ? 0 : valor ?? 0), 0);
+      referenciaRepasseSim.textContent = cotas.length && cotas.every(cota => cota.valor !== null)
+        ? "Referência sobre as cotas: " + formatarCentavos(Math.round(base * Number(despesaSim.value) / 100))
+        : "";
+    }
 
     function atualizarCondicoesSim() {
       const quantidade = Number(parcelasSim.value);
@@ -581,6 +607,9 @@
       editorCotasSim.open = false;
       editorCotasSim.hidden = true;
       erroCotasSim.hidden = true;
+      repasseSim.value = "";
+      erroRepasseSim.hidden = true;
+      atualizarReferenciaRepasse();
       revisaoSim.replaceChildren();
       gerarSim.disabled = true;
     }
@@ -701,30 +730,37 @@
           if (cotas.length && !primeiroVencimentoSim.value) primeiroVencimentoSim.value = somarDias(hojeEmSaoPaulo(), 7);
           atualizarCondicoesSim();
           atualizarEditorCotas();
+          atualizarReferenciaRepasse();
           gerarSim.disabled = !cotas.length;
         };
 
         formulario.onsubmit = evento => {
           evento.preventDefault();
           const cotas = unidades.get(unidadeSim.value) ?? [];
-          const marcadas = [...listaCotas.querySelectorAll("input:checked")];
+          const marcadas = camposCotasSelecionadas();
           if (!marcadas.length || !dataCivilValida(primeiroVencimentoSim.value)) return;
-          const entradas = marcadas.map(caixa => valoresCotasSim.children[Number(caixa.value)].querySelector("input"));
-          const escolhidas = marcadas.map((caixa, i) => ({
-            ...cotas[Number(caixa.value)], valor: lerValorMonetario(entradas[i].value),
-          }));
-          const invalida = escolhidas.findIndex(cota => cota.valor === null);
-          if (invalida !== -1) {
+          const invalida = marcadas.find(cota => cota.valor === null);
+          if (invalida) {
             editorCotasSim.open = true;
             erroCotasSim.textContent = "Informe um valor positivo e válido para cada cota selecionada.";
             erroCotasSim.hidden = false;
-            entradas[invalida].focus();
+            invalida.campo.focus();
             return;
           }
+          const repasse = lerValorMonetario(repasseSim.value, { aceitarZero: true });
+          const semBase = isentarRegularesSim.checked && marcadas.every(cota => cota.regular);
+          if (repasse === null || (semBase && repasse > 0)) {
+            erroRepasseSim.textContent = repasse === null
+              ? "Informe o valor do repasse, inclusive quando for R$ 0,00."
+              : "Informe R$ 0,00 quando todas as cotas selecionadas estiverem isentas.";
+            erroRepasseSim.hidden = false;
+            repasseSim.focus();
+            return;
+          }
+          const escolhidas = marcadas.map(({ indice, valor }) => ({ ...cotas[indice], valor }));
           const quantidade = Number(parcelasSim.value);
-          const percentual = Number(despesaSim.value);
           const previa = calcularSimulacao({
-            cotas: escolhidas, percentual, quantidade, price: jurosSim.checked,
+            cotas: escolhidas, repasse, quantidade, price: jurosSim.checked,
             isentarRegulares: isentarRegularesSim.checked,
             boleto: boletoSim.checked ? custoBoleto ?? 0 : 0,
             primeiroVencimento: primeiroVencimentoSim.value,
@@ -742,7 +778,7 @@
             const resumo = [
               ["Cotas selecionadas", previa.base],
               ...(previa.baseIsenta ? [["Cotas regulares isentas de despesa", previa.baseIsenta]] : []),
-              ["Despesa de cobrança (" + percentual + "%)", previa.despesa],
+              ["Repasse atualizado (despesa de cobrança)", previa.despesa],
               ["Juros do parcelamento", previa.juros], ["Emissão de boletos", previa.boletos], ["Total", previa.total],
             ];
             for (const [nome, valor] of resumo) {
@@ -826,6 +862,12 @@
     valoresCotasSim.addEventListener("input", () => {
       revisaoSim.replaceChildren();
       erroCotasSim.hidden = true;
+      atualizarReferenciaRepasse();
+    });
+
+    repasseSim.addEventListener("input", () => {
+      erroRepasseSim.hidden = true;
+      revisaoSim.replaceChildren();
     });
 
     formulario.addEventListener("change", () => {
@@ -836,6 +878,8 @@
       isencaoSim.hidden = !regularSelecionada;
       isentarRegularesSim.disabled = !regularSelecionada;
       if (!regularSelecionada) isentarRegularesSim.checked = false;
+      erroRepasseSim.hidden = true;
+      atualizarReferenciaRepasse();
       gerarSim.disabled = !listaCotas.querySelector("input:checked");
     });
 
