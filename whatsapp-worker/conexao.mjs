@@ -1,4 +1,5 @@
-import { stat } from 'node:fs/promises';
+import { stat, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import QRCode from 'qrcode';
 import whatsapp from 'whatsapp-web.js';
 
@@ -8,6 +9,11 @@ const {
 } = process.env;
 if (!ESPELHO_URL || !ESPELHO_PUBLIC_KEY || !/^[a-f0-9]{64}$/.test(WHATSAPP_PILOTO_KEY ?? '') || !perfil || !chromium || !/^\d{10,15}$/.test(numero ?? '') || !(await stat(perfil)).isDirectory()) {
   throw new Error('Configure o volume de sessão e o número com DDI antes de iniciar.');
+}
+
+// O entrypoint mantém um lock exclusivo no volume enquanto o Chromium está aberto.
+for (const arquivo of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+  await rm(join(perfil, 'session-espelhar-piloto', arquivo), { force: true });
 }
 
 const cliente = new whatsapp.Client({
@@ -84,6 +90,6 @@ try {
   await publicar();
   await cliente.initialize();
 } catch (erro) {
-  console.error('Falha ao iniciar o navegador.', String(erro?.message ?? '').split('\n').filter(linha => !linha.includes('dbus') && !linha.includes('https://')).slice(0, 14).join(' '));
+  console.error('Falha ao iniciar o navegador.', String(erro?.message ?? '').split('\n').slice(0, 3).join(' '));
   await encerrar(1);
 }
