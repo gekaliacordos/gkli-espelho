@@ -17,7 +17,25 @@ for (const arquivo of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
   await rm(join(perfil, 'session-espelhar-piloto', arquivo), { force: true });
 }
 
-const cliente = new whatsapp.Client({
+class ClientePareamento extends whatsapp.Client {
+  async initWebVersionCache() {
+    await super.initWebVersionCache();
+    const agente = (await this.pupBrowser.userAgent()).replace('HeadlessChrome/', 'Chrome/');
+    await this.pupPage.setUserAgent(agente);
+  }
+
+  async inject() {
+    await this.pupPage.waitForFunction(() => {
+      try { return Boolean(window.Debug?.VERSION && window.require?.('WAWebSocketModel')?.Socket); }
+      catch { return false; }
+    }, { timeout: 120000 });
+    return super.inject();
+  }
+}
+
+const TipoCliente = linha ? ClientePareamento : whatsapp.Client;
+const cliente = new TipoCliente({
+  ...(linha ? { userAgent: false, authTimeoutMs: 120000, webVersionCache: { type: 'none' } } : {}),
   authStrategy: new whatsapp.LocalAuth({ clientId: 'espelhar-piloto', dataPath: perfil }),
   puppeteer: {
     executablePath: chromium,
