@@ -544,3 +544,14 @@ li { margin: .4rem 0; overflow-wrap: anywhere; }
 .config-form fieldset { min-width: 0; max-height: 13rem; overflow: auto; }
 .config-form fieldset label { display: flex; align-items: baseline; gap: .5rem; overflow-wrap: anywhere; }
 .config-form input[type=checkbox] { width: auto; }
+
+.mensageria-filtros, .mensageria-opcoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: .75rem;
+  margin-block: 1rem;
+}
+.mensageria-filtros label, .mensageria-opcoes label { display: grid; gap: .35rem; min-width: 0; }
+.mensageria-filtros select, .mensageria-opcoes select { width: 100%; min-width: 0; }
+#configuracoes > details { margin-block: 1rem; }
+#config-opcoes-mensageria > details { margin-block: .65rem; }

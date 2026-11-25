@@ -149,6 +149,7 @@
         <form method="dialog"><button type="submit" autofocus>Fechar</button></form>
       </header>
       <p role="status"></p>
+      <details open><summary>Acesso</summary>
       <div class="config-secoes">
         <section aria-labelledby="config-usuarios-titulo">
           <h3 id="config-usuarios-titulo">Usuários e acessos</h3>
@@ -179,12 +180,18 @@
           </form>
         </section>
       </div>
+      </details>
+      <details id="config-mensageria">
+        <summary>Mensageria</summary>
+        <div id="config-opcoes-mensageria"></div>
+      </details>
     </dialog>
     <p id="status-sessao" role="status"></p>
   </main>
   <script type="module">
     import { agruparCotas, calcularSimulacao, dataCivilValida, hojeEmSaoPaulo, lerValorMonetario, localizarCadastro, somarDias, validarParcelasEditadas } from "./simulacao.mjs";
     import { calcularRanking, lerReguaRanking } from "./ranking.mjs";
+    import { montarMensageria, configurarMensageria } from "./mensageria.mjs";
     import { configurarAdministracao, modulosEspelho } from "./configuracoes.mjs";
     const authUrl = "https://jrctpldzavctwaqiepul.supabase.co/auth/v1";
     const apiKey = "sb_publishable_TrF0lI26AdHZ1ksG650lPA_N6JrTYCz";
@@ -213,6 +220,10 @@
     let cardAtual;
     const configuracoes = configurarAdministracao({
       authUrl, apiKey, obterToken: () => accessToken, consultar: consultarEspelho,
+    });
+
+    const atualizarMensageria = configurarMensageria({
+      consultar: consultarEspelho, obterToken: () => accessToken, authUrl, apiKey,
     });
 
     function mostrarInicio(restaurarFoco = false) {
@@ -1269,9 +1280,10 @@
       destino.replaceChildren(imprimir, documento);
     }
 
-    function exibirPreviaCobranca(destino, captura, regua) {
+    function exibirPreviaCobranca(destino, captura, regua, selecao) {
       const { cotasParaPrevia, avisos } = calcularRanking(captura, regua, { incluirCotasParaPrevia: true });
-      const grupos = Map.groupBy(cotasParaPrevia, cota => cota.unidade);
+      const exibidas = cotasParaPrevia.filter(cota => selecao.cotas.has(JSON.stringify([cota.unidade, String(cota.recibo)])));
+      const grupos = Map.groupBy(exibidas, cota => cota.unidade);
       const contatos = Map.groupBy(captura.dados.contatos ?? [], contato => contato.unidade);
       const artigo = document.createElement("article");
       artigo.className = "ranking-document";
@@ -1292,44 +1304,49 @@
         const painel = adicionar(artigo, "details", "");
         painel.className = "ranking-secao";
         adicionar(painel, "summary", unidade + " · " + cotas.length + " cota(s) · " + (emails.join(", ") || "Sem e-mail válido"));
-        const assunto = "Cotas condominiais em aberto – " + captura.condominio + " – Unidade " + unidade;
-        adicionar(painel, "p", "Assunto: " + assunto);
+        const assuntoPadrao = "Cotas condominiais em aberto – " + captura.condominio + " – Unidade " + unidade;
         painel.append(tabelaRanking(["Recibo", "Vencimento", "Saldo na captação"], cotas.map(cota =>
           [String(cota.recibo), cota.vencimento.split("-").reverse().join("/"), formatarCentavos(cota.saldo)])));
         const linhas = cotas.map(cota => "• Vencimento " + cota.vencimento.split("-").reverse().join("/") + " – " + formatarCentavos(cota.saldo));
-        const mensagem = adicionar(painel, "p", [
+        const corpoPadrao = [
           "Olá,",
           "Na posição de " + dataHora.format(new Date(captura.captado_em)) + ", constavam em aberto as seguintes cotas do condomínio " + captura.condominio + ", unidade " + unidade + ":",
           ...linhas,
           "Total na data da consulta: " + formatarCentavos(cotas.reduce((total, cota) => total + cota.saldo, 0)) + ".",
           "Se você já pagou, pode desconsiderar este aviso. Para consultar o valor atualizado ou verificar opções de regularização, responda a este e-mail.",
           "Equipe de cobrança GKLI",
-        ].join("\n\n"));
+        ].join("\n\n");
+        const variaveis = {
+          condominio: captura.condominio, unidade, cotas: linhas.join("\n"),
+          total: formatarCentavos(cotas.reduce((total, cota) => total + cota.saldo, 0)),
+          data: dataHora.format(new Date(captura.captado_em)),
+        };
+        const preencher = modelo => modelo.replace(/\{\{(condominio|unidade|cotas|total|data)\}\}/g, (_, chave) => variaveis[chave]);
+        adicionar(painel, "p", "Assunto: " + preencher(selecao.modelo?.assunto || assuntoPadrao));
+        const mensagem = adicionar(painel, "p", preencher(selecao.modelo?.corpo || corpoPadrao));
         mensagem.style.whiteSpace = "pre-wrap";
       }
-      resumo.textContent = cotasParaPrevia.length + " cota(s) na janela de cobrança · " + comDestinatario + " unidade(s) com e-mail · " + (grupos.size - comDestinatario) + " sem e-mail válido";
+      resumo.textContent = exibidas.length + " cota(s) na janela de cobrança · " + comDestinatario + " unidade(s) com e-mail · " + (grupos.size - comDestinatario) + " sem e-mail válido";
       for (const aviso of avisos) adicionar(artigo, "p", aviso);
       destino.replaceChildren(artigo);
     }
 
-    async function mostrarConsultaPorCondominio(destino, token, consultaCaptacoes, consultaAdministradoras, consultaCadastro) {
-      const previa = destino === mensageria;
-      const prefixo = previa ? "mensageria" : "relatorio";
+    async function mostrarRelatorios(token, consultaCaptacoes, consultaAdministradoras, consultaCadastro) {
+      const destino = relatorios;
       destino.textContent = "Consultando captações…";
       try {
         const [captacoes, administradoras, cadastro] = await Promise.all([consultaCaptacoes, consultaAdministradoras, consultaCadastro]);
         if (token !== accessToken) return;
         const relatorio = colunaConsulta("relatorio-tipo", "Relatório");
-        const adm = colunaConsulta(prefixo + "-adm", "Administradora");
-        const condominio = colunaConsulta(prefixo + "-condominio", "Condomínio");
+        const adm = colunaConsulta("relatorio-adm", "Administradora");
+        const condominio = colunaConsulta("relatorio-condominio", "Condomínio");
         const conteudo = document.createElement("div");
         conteudo.className = "relatorio-conteudo";
         conteudo.setAttribute("aria-live", "polite");
-        montarColunas(destino, previa ? "Mensageria" : "Relatórios", previa ? "colunas-mensageria" : "colunas-relatorios",
-          previa ? [adm, condominio] : [relatorio, adm, condominio]);
+        montarColunas(destino, "Relatórios", "colunas-relatorios", [relatorio, adm, condominio]);
         destino.append(conteudo);
         opcoesConsulta(relatorio.corpo, [["ranking", "Ranking de inadimplência"]]);
-        opcoesConsulta(adm.corpo, previa ? opcoesAdministradoras(administradoras) : [], "Selecione o relatório");
+        opcoesConsulta(adm.corpo, [], "Selecione o relatório");
         opcoesConsulta(condominio.corpo, [], "Selecione a administradora");
         let pedido = 0;
 
@@ -1361,8 +1378,7 @@
               conteudo.textContent = "A régua deste condomínio não foi identificada no cadastro. Confira os prazos no cadastro.";
               return;
             }
-            if (previa) exibirPreviaCobranca(conteudo, captura, regua);
-            else exibirRanking(conteudo, captura, regua, adm.corpo.selectedOptions[0].textContent);
+            exibirRanking(conteudo, captura, regua, adm.corpo.selectedOptions[0].textContent);
           } catch {
             if (token !== accessToken || atual !== pedido) return;
             conteudo.textContent = "Não foi possível carregar o relatório. Selecione o condomínio novamente.";
@@ -1424,8 +1440,13 @@
         if (perfil.administrador) void mostrarEspelhamentoGeral(accessToken);
         if (modulos.has("captacao")) void mostrarSelecaoCaptacao(accessToken, captacoes, administradoras);
         if (modulos.has("cadastro")) void mostrarCadastro(accessToken, cadastro, administradoras);
-        if (modulos.has("relatorios")) void mostrarConsultaPorCondominio(relatorios, accessToken, captacoes, administradoras, cadastro);
-        if (modulos.has("mensageria")) void mostrarConsultaPorCondominio(mensageria, accessToken, captacoes, administradoras, cadastro);
+        if (modulos.has("relatorios")) void mostrarRelatorios(accessToken, captacoes, administradoras, cadastro);
+        if (modulos.has("mensageria")) void montarMensageria({
+          destino: mensageria, token: accessToken, obterToken: () => accessToken,
+          consultar: consultarEspelho, captacoes, cadastro, consultarCaptacao, calcularRanking,
+          lerReguaRanking, localizarCadastro, exibirPreviaCobranca, formatarCentavos,
+          atualizarMensageria,
+        });
         if (modulos.has("acordo")) void prepararSimulador(accessToken, captacoes, cadastro, administradoras);
         if (!modulos.size) statusSessao.textContent = "Nenhum módulo liberado para sua conta.";
       } catch {
