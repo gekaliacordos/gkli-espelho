@@ -188,6 +188,8 @@ form:not([hidden]) { display: grid; gap: .65rem; }
 .card-icone-acordo::before { width: 1.12rem; height: 1.12rem; border: 1.5px solid; border-radius: 50%; }
 .card-icone-acordo::after { width: .48rem; height: .26rem; border-left: 1.5px solid; border-bottom: 1.5px solid; transform: translateY(-.05rem) rotate(-45deg); }
 
+.card-icone-mensageria::before { width: 1.18rem; height: .83rem; border: 1.5px solid; border-radius: .14rem; }
+.card-icone-mensageria::after { width: .48rem; height: .48rem; border-right: 1.5px solid; border-bottom: 1.5px solid; transform: translateY(-.17rem) rotate(45deg); }
 .card-icone-relatorios::before { inset: .62rem .55rem; border-inline-start: 1.5px solid; border-bottom: 1.5px solid; }
 .card-icone-relatorios::after { width: .15rem; height: .44rem; background: currentColor; transform: translate(-.28rem, .20rem);
   box-shadow: .27rem -.12rem currentColor, .54rem -.27rem currentColor; }
@@ -234,6 +236,7 @@ li { margin: .4rem 0; overflow-wrap: anywhere; }
 .simulacao-colunas { display: grid; grid-template-columns: 1fr 1.2fr 1fr 1.45fr; gap: .72rem; }
 .colunas-cadastro { grid-template-columns: 1fr 1.2fr 2fr; }
 .colunas-relatorios { grid-template-columns: 1fr 1fr 1.2fr; }
+.colunas-mensageria { grid-template-columns: 1fr 1.2fr; }
 .relatorio-conteudo:not(:empty) { margin-top: 1.25rem; }
 .tabela-ranking { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .tabela-ranking caption { text-align: start; color: var(--petroleo-escuro); font-weight: 800; margin-bottom: .5rem; }

@@ -52,6 +52,10 @@
           <span class="card-icone card-icone-relatorios" aria-hidden="true"></span>
           <strong>Relatórios</strong><span>Consulte o ranking de inadimplência.</span>
         </button>
+        <button type="button" class="home-card" data-area="mensageria-area" aria-controls="mensageria-area">
+          <span class="card-icone card-icone-mensageria" aria-hidden="true"></span>
+          <strong>Mensageria</strong><span>Confira a prévia dos e-mails de cobrança.</span>
+        </button>
       </nav>
       <button id="voltar-inicio" type="button" hidden>← Voltar ao início</button>
       <section id="acordo-area" aria-labelledby="acordo-titulo" tabindex="-1" hidden>
@@ -127,6 +131,9 @@
       <section id="relatorios-area" aria-label="Relatórios" tabindex="-1" hidden>
         <div id="relatorios"></div>
       </section>
+      <section id="mensageria-area" aria-label="Mensageria" tabindex="-1" hidden>
+        <div id="mensageria"></div>
+      </section>
       <section id="cadastro-area" aria-label="Cadastro" tabindex="-1" hidden>
         <div id="catalog"></div>
       </section>
@@ -151,6 +158,7 @@
     const espelhamentoGeral = document.querySelector("#espelhamento-geral");
     const catalog = document.querySelector("#catalog");
     const relatorios = document.querySelector("#relatorios");
+    const mensageria = document.querySelector("#mensageria");
     const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
     const dataCurta = iso => iso.split("-").reverse().join("/");
     const dataHora = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
@@ -1257,21 +1265,24 @@
       destino.replaceChildren(artigo);
     }
 
-    async function mostrarRelatorios(token, consultaCaptacoes, consultaAdministradoras, consultaCadastro) {
-      relatorios.textContent = "Consultando captações…";
+    async function mostrarConsultaPorCondominio(destino, token, consultaCaptacoes, consultaAdministradoras, consultaCadastro) {
+      const previa = destino === mensageria;
+      const prefixo = previa ? "mensageria" : "relatorio";
+      destino.textContent = "Consultando captações…";
       try {
         const [captacoes, administradoras, cadastro] = await Promise.all([consultaCaptacoes, consultaAdministradoras, consultaCadastro]);
         if (token !== accessToken) return;
         const relatorio = colunaConsulta("relatorio-tipo", "Relatório");
-        const adm = colunaConsulta("relatorio-adm", "Administradora");
-        const condominio = colunaConsulta("relatorio-condominio", "Condomínio");
+        const adm = colunaConsulta(prefixo + "-adm", "Administradora");
+        const condominio = colunaConsulta(prefixo + "-condominio", "Condomínio");
         const conteudo = document.createElement("div");
         conteudo.className = "relatorio-conteudo";
         conteudo.setAttribute("aria-live", "polite");
-        montarColunas(relatorios, "Relatórios", "colunas-relatorios", [relatorio, adm, condominio]);
-        relatorios.append(conteudo);
-        opcoesConsulta(relatorio.corpo, [["ranking", "Ranking de inadimplência"], ["previa-cobranca", "Prévia de cobrança por e-mail"]]);
-        opcoesConsulta(adm.corpo, [], "Selecione o relatório");
+        montarColunas(destino, previa ? "Mensageria" : "Relatórios", previa ? "colunas-mensageria" : "colunas-relatorios",
+          previa ? [adm, condominio] : [relatorio, adm, condominio]);
+        destino.append(conteudo);
+        opcoesConsulta(relatorio.corpo, [["ranking", "Ranking de inadimplência"]]);
+        opcoesConsulta(adm.corpo, previa ? opcoesAdministradoras(administradoras) : [], "Selecione o relatório");
         opcoesConsulta(condominio.corpo, [], "Selecione a administradora");
         let pedido = 0;
 
@@ -1289,7 +1300,6 @@
         });
         condominio.corpo.addEventListener("change", async () => {
           const atual = ++pedido;
-          const previa = relatorio.corpo.value === "previa-cobranca";
           conteudo.textContent = "Consultando a captação…";
           try {
             const [captura] = await consultarCaptacao(token, condominio.corpo.value);
@@ -1301,7 +1311,7 @@
             const referencia = captacoes.find(item => String(item.id) === condominio.corpo.value);
             const regua = lerReguaRanking(localizarCadastro(referencia ?? captura, cadastro));
             if (!regua) {
-              conteudo.textContent = "A régua deste condomínio não foi identificada no cadastro. Confira os prazos antes de gerar o ranking.";
+              conteudo.textContent = "A régua deste condomínio não foi identificada no cadastro. Confira os prazos no cadastro.";
               return;
             }
             if (previa) exibirPreviaCobranca(conteudo, captura, regua);
@@ -1313,7 +1323,7 @@
           }
         });
       } catch {
-        if (token === accessToken) relatorios.textContent = "Não foi possível carregar os relatórios.";
+        if (token === accessToken) destino.textContent = "Não foi possível carregar as captações.";
       }
     }
 
@@ -1356,7 +1366,8 @@
         void mostrarEspelhamentoGeral(accessToken);
         void mostrarSelecaoCaptacao(accessToken, captacoes, administradoras);
         void mostrarCadastro(accessToken, cadastro, administradoras);
-        void mostrarRelatorios(accessToken, captacoes, administradoras, cadastro);
+        void mostrarConsultaPorCondominio(relatorios, accessToken, captacoes, administradoras, cadastro);
+        void mostrarConsultaPorCondominio(mensageria, accessToken, captacoes, administradoras, cadastro);
         void prepararSimulador(accessToken, captacoes, cadastro, administradoras);
       } catch {
         status.textContent = "Não foi possível conectar. Tente novamente.";
@@ -1387,6 +1398,7 @@
         limparSimulador();
         catalog.textContent = "";
         relatorios.textContent = "";
+        mensageria.textContent = "";
         signedIn.hidden = true;
         mostrarInicio();
         login.hidden = false;
