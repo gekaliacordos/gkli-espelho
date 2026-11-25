@@ -518,3 +518,29 @@ li { margin: .4rem 0; overflow-wrap: anywhere; }
 .espelhamento-controle span {
   font-size: .9rem;
 }
+
+
+.session-header { justify-content: flex-end; }
+#account { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.session-actions { display: flex; align-items: center; gap: .5rem; }
+#abrir-configuracoes { min-width: 2.75rem; padding-inline: .6rem; font-size: 1.35rem; line-height: 1; }
+#configuracoes {
+  width: min(54rem, calc(100% - 1.5rem));
+  max-height: calc(100dvh - 1.5rem);
+  overflow: auto;
+  border: 1px solid var(--linha, #dccbb9);
+  border-radius: 1rem;
+  padding: clamp(.8rem, 3vw, 1.4rem);
+  background: #fffaf4;
+  color: inherit;
+}
+#configuracoes::backdrop { background: rgb(45 30 22 / 55%); }
+.config-header { display: flex; gap: .75rem; justify-content: space-between; align-items: center; }
+.config-header h2, .config-secoes h3 { margin: 0; }
+.config-secoes { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
+.config-secoes section, .config-form { display: grid; align-content: start; gap: .65rem; min-width: 0; }
+.config-form { padding: .65rem 0; }
+.config-form input:not([type=checkbox]), .config-secoes select { width: 100%; min-width: 0; }
+.config-form fieldset { min-width: 0; max-height: 13rem; overflow: auto; }
+.config-form fieldset label { display: flex; align-items: baseline; gap: .5rem; overflow-wrap: anywhere; }
+.config-form input[type=checkbox] { width: auto; }

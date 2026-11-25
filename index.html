@@ -30,7 +30,12 @@
     <section id="signed-in" hidden>
       <div class="session-header">
         <p id="account"></p>
-        <button id="exit" type="button">Sair</button>
+        <div class="session-actions">
+          <button id="exit" type="button">Sair</button>
+          <button id="abrir-configuracoes" type="button" aria-label="Configurações globais" aria-haspopup="dialog" title="Configurações globais" hidden>
+            <span aria-hidden="true">⚙</span>
+          </button>
+        </div>
       </div>
       <header class="inicio-hero">
         <h1>GKLI Espelho</h1>
@@ -138,11 +143,49 @@
         <div id="catalog"></div>
       </section>
     </section>
+    <dialog id="configuracoes" aria-labelledby="config-titulo">
+      <header class="config-header">
+        <h2 id="config-titulo">Configurações globais</h2>
+        <form method="dialog"><button type="submit" autofocus>Fechar</button></form>
+      </header>
+      <p role="status"></p>
+      <div class="config-secoes">
+        <section aria-labelledby="config-usuarios-titulo">
+          <h3 id="config-usuarios-titulo">Usuários e acessos</h3>
+          <form id="config-criar-usuario" class="config-form">
+            <label>E-mail <input type="email" name="email" maxlength="254" required></label>
+            <label>Senha inicial <input type="password" name="senha" autocomplete="new-password" minlength="12" maxlength="72" required></label>
+            <button type="submit">Criar usuário</button>
+          </form>
+          <label for="config-usuario">Gerenciar usuário</label>
+          <select id="config-usuario"></select>
+          <form id="config-editar-usuario" class="config-form" hidden>
+            <fieldset id="config-modulos"><legend>Módulos</legend></fieldset>
+            <fieldset id="config-carteiras"><legend>Carteiras autorizadas</legend></fieldset>
+            <button type="submit">Salvar acessos</button>
+          </form>
+        </section>
+        <section aria-labelledby="config-carteiras-titulo">
+          <h3 id="config-carteiras-titulo">Carteiras</h3>
+          <form id="config-criar-carteira" class="config-form">
+            <label>Nome da carteira <input name="nome" maxlength="120" required></label>
+            <button type="submit">Criar carteira</button>
+          </form>
+          <label for="config-carteira">Gerenciar carteira</label>
+          <select id="config-carteira"></select>
+          <form id="config-editar-carteira" class="config-form" hidden>
+            <fieldset id="config-condominios"><legend>Condomínios da carteira</legend></fieldset>
+            <button type="submit">Salvar condomínios</button>
+          </form>
+        </section>
+      </div>
+    </dialog>
     <p id="status-sessao" role="status"></p>
   </main>
   <script type="module">
     import { agruparCotas, calcularSimulacao, dataCivilValida, hojeEmSaoPaulo, lerValorMonetario, localizarCadastro, somarDias, validarParcelasEditadas } from "./simulacao.mjs";
     import { calcularRanking, lerReguaRanking } from "./ranking.mjs";
+    import { configurarAdministracao, modulosEspelho } from "./configuracoes.mjs";
     const authUrl = "https://jrctpldzavctwaqiepul.supabase.co/auth/v1";
     const apiKey = "sb_publishable_TrF0lI26AdHZ1ksG650lPA_N6JrTYCz";
     const login = document.querySelector("#login");
@@ -168,6 +211,9 @@
     const voltarInicio = document.querySelector("#voltar-inicio");
     const cards = [...inicio.querySelectorAll("[data-area]")];
     let cardAtual;
+    const configuracoes = configurarAdministracao({
+      authUrl, apiKey, obterToken: () => accessToken, consultar: consultarEspelho,
+    });
 
     function mostrarInicio(restaurarFoco = false) {
       if (cardAtual) {
@@ -325,6 +371,7 @@
     }
 
     function controleEspelhamento(token, escopo, chave, ativo, explicacao, atualizar) {
+      if (document.querySelector("#abrir-configuracoes").hidden) return document.createDocumentFragment();
       const controle = document.createElement("div");
       controle.className = "espelhamento-controle";
       const botao = document.createElement("button");
@@ -1347,28 +1394,40 @@
           return;
         }
         const session = await response.json();
+        const [perfil] = await consultarEspelho(session.access_token, "espelho_usuarios", {
+          select: "administrador,modulos", id: "eq." + session.user.id, limit: "1",
+        });
+        if (!perfil) {
+          status.textContent = "Sua conta ainda não tem acesso ao GKLI Espelho.";
+          return;
+        }
+        const modulos = new Set(perfil.administrador ? modulosEspelho.map(([id]) => id) : perfil.modulos);
+        for (const card of cards) card.hidden = !modulos.has(card.dataset.area.replace("-area", ""));
+        configuracoes.definirAdministrador(perfil.administrador);
         accessToken = session.access_token;
         statusSessao.textContent = "";
         account.textContent = "Sessão iniciada como " + session.user.email + ".";
         login.hidden = true;
         signedIn.hidden = false;
         exit.focus();
-        const administradoras = consultarEspelho(accessToken, "administradoras", {
+        const administradoras = (modulos.size) ? consultarEspelho(accessToken, "administradoras", {
           select: "chave,nome,nome_operacional,cadastro,espelhamento_automatico", order: "nome_operacional.asc,chave.asc",
-        });
-        const captacoes = consultarEspelho(accessToken, "captacoes_por_administradora", {
+        }) : Promise.resolve([]);
+        const captacoes = (modulos.has("captacao") || modulos.has("acordo") || modulos.has("relatorios") || modulos.has("mensageria")) ? consultarEspelho(accessToken, "captacoes_por_administradora", {
           select: "id,codigo_condominio,condominio,administradora,administradora_chave",
           order: "condominio.asc,codigo_condominio.asc,id.asc",
-        });
-        const cadastro = consultarEspelho(accessToken, "condominios", {
+        }) : Promise.resolve([]);
+        const cadastro = (modulos.has("cadastro") || modulos.has("acordo") || modulos.has("relatorios") || modulos.has("mensageria")) ? consultarEspelho(accessToken, "condominios", {
           select: "id,nome,administradora,administradora_chave,status,cadastro,espelhamento_automatico,espelhamento_alvos(codigo),condominio_acessos(situacao,administradora,portal)", order: "nome.asc,id.asc",
-        });
-        void mostrarEspelhamentoGeral(accessToken);
-        void mostrarSelecaoCaptacao(accessToken, captacoes, administradoras);
-        void mostrarCadastro(accessToken, cadastro, administradoras);
-        void mostrarConsultaPorCondominio(relatorios, accessToken, captacoes, administradoras, cadastro);
-        void mostrarConsultaPorCondominio(mensageria, accessToken, captacoes, administradoras, cadastro);
-        void prepararSimulador(accessToken, captacoes, cadastro, administradoras);
+        }) : Promise.resolve([]);
+        espelhamentoGeral.hidden = !perfil.administrador;
+        if (perfil.administrador) void mostrarEspelhamentoGeral(accessToken);
+        if (modulos.has("captacao")) void mostrarSelecaoCaptacao(accessToken, captacoes, administradoras);
+        if (modulos.has("cadastro")) void mostrarCadastro(accessToken, cadastro, administradoras);
+        if (modulos.has("relatorios")) void mostrarConsultaPorCondominio(relatorios, accessToken, captacoes, administradoras, cadastro);
+        if (modulos.has("mensageria")) void mostrarConsultaPorCondominio(mensageria, accessToken, captacoes, administradoras, cadastro);
+        if (modulos.has("acordo")) void prepararSimulador(accessToken, captacoes, cadastro, administradoras);
+        if (!modulos.size) statusSessao.textContent = "Nenhum módulo liberado para sua conta.";
       } catch {
         status.textContent = "Não foi possível conectar. Tente novamente.";
       } finally {
@@ -1393,6 +1452,7 @@
         statusSessao.textContent = "Sessão encerrada nesta página. O servidor não confirmou a saída.";
       } finally {
         accessToken = undefined;
+        configuracoes.definirAdministrador(false);
         account.textContent = "";
         result.textContent = "";
         limparSimulador();
