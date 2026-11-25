@@ -184,6 +184,11 @@
       <details id="config-mensageria">
         <summary>Mensageria</summary>
         <div id="config-opcoes-mensageria"></div>
+        <details id="whatsapp-piloto">
+          <summary>WhatsApp Web · Linha GEKALI</summary>
+          <p role="status"></p>
+          <img alt="QR de pareamento da linha GEKALI" width="240" height="240" hidden>
+        </details>
       </details>
     </dialog>
     <p id="status-sessao" role="status"></p>
@@ -225,6 +230,53 @@
     const atualizarMensageria = configurarMensageria({
       consultar: consultarEspelho, obterToken: () => accessToken, authUrl, apiKey,
     });
+
+    const painelWhatsapp = document.querySelector("#whatsapp-piloto");
+    const dialogoGlobal = document.querySelector("#configuracoes");
+    const qrWhatsapp = painelWhatsapp.querySelector("img");
+    const estadoWhatsapp = painelWhatsapp.querySelector("[role=status]");
+    const estadosWhatsapp = {
+      aguardando_worker: "Aguardando o worker do Railway.",
+      iniciando: "Iniciando o navegador.",
+      aguardando_qr: "Abra Dispositivos conectados no WhatsApp da linha GEKALI.",
+      autenticando: "Validando a sessão.",
+      conectado: "Linha GEKALI conectada em modo somente conexão.",
+      linha_divergente: "A linha conectada não é a linha GEKALI.",
+      desconectado: "Sessão desconectada.",
+    };
+    let consultandoWhatsapp = false;
+    function limparQrWhatsapp() {
+      qrWhatsapp.hidden = true;
+      qrWhatsapp.removeAttribute("src");
+    }
+    async function consultarWhatsapp() {
+      if (!dialogoGlobal.open || !painelWhatsapp.open || !document.querySelector("#config-mensageria").open || consultandoWhatsapp) return;
+      const token = accessToken;
+      consultandoWhatsapp = true;
+      try {
+        const resultado = await consultarEspelho(token, "rpc/whatsapp_piloto_status", {});
+        if (token !== accessToken || !dialogoGlobal.open || !painelWhatsapp.open) return;
+        estadoWhatsapp.textContent = estadosWhatsapp[resultado.estado] ?? "Estado indisponível.";
+        if (resultado.qr && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(resultado.qr)) {
+          qrWhatsapp.src = resultado.qr;
+          qrWhatsapp.hidden = false;
+        } else limparQrWhatsapp();
+      } catch {
+        limparQrWhatsapp();
+        estadoWhatsapp.textContent = "Não foi possível consultar a conexão.";
+      } finally {
+        consultandoWhatsapp = false;
+      }
+    }
+    painelWhatsapp.addEventListener("toggle", () => {
+      if (painelWhatsapp.open) void consultarWhatsapp();
+      else limparQrWhatsapp();
+    });
+    dialogoGlobal.addEventListener("close", () => { painelWhatsapp.open = false; limparQrWhatsapp(); });
+    document.querySelector("#config-mensageria").addEventListener("toggle", event => {
+      if (!event.currentTarget.open) { painelWhatsapp.open = false; limparQrWhatsapp(); }
+    });
+    setInterval(consultarWhatsapp, 4000);
 
     function mostrarInicio(restaurarFoco = false) {
       if (cardAtual) {
