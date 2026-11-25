@@ -62,6 +62,47 @@ async function encerrar(codigo) {
   process.exit(codigo);
 }
 
+async function rpcTeste(funcao, dados = {}) {
+  const resposta = await fetch(new URL('/rest/v1/rpc/' + funcao, ESPELHO_URL), {
+    method: 'POST',
+    headers: { apikey: ESPELHO_PUBLIC_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chave: WHATSAPP_PILOTO_KEY, ...dados }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!resposta.ok) throw new Error('HTTP ' + resposta.status);
+  return resposta.json();
+}
+
+async function processarTesteAutorizado() {
+  if (encerrando || estado !== 'conectado') return;
+  try {
+    const teste = await rpcTeste('whatsapp_piloto_reservar_teste');
+    if (!teste) return;
+    let resultado = 'incerto';
+    let comprovante = null;
+    try {
+      const destino = await cliente.getNumberId(teste.numero);
+      if (!destino?._serialized) {
+        resultado = 'numero_nao_encontrado';
+      } else if (!encerrando && estado === 'conectado' && cliente.info?.wid?.user === numero) {
+        const mensagem = await cliente.sendMessage(destino._serialized, teste.mensagem, { sendSeen: false });
+        if (mensagem?.id?._serialized) {
+          comprovante = mensagem.id._serialized;
+          resultado = 'enviado';
+        }
+      }
+    } catch {
+      // Após a reserva, qualquer erro exige conferência e nunca dispara reenvio automático.
+    }
+    const salvo = await rpcTeste('whatsapp_piloto_concluir_teste', {
+      tarefa: teste.id, resultado, comprovante,
+    });
+    if (!salvo) throw new Error('Resultado não registrado');
+  } catch {
+    console.error('Falha ao processar o teste autorizado de WhatsApp.');
+  }
+}
+
 cliente.on('qr', qr => void atualizar('aguardando_qr', qr));
 cliente.on('authenticated', () => void atualizar('autenticando'));
 const heartbeat = setInterval(publicar, 12000);
@@ -73,7 +114,8 @@ cliente.on('ready', () => {
     return;
   }
   void atualizar('conectado');
-  console.log('Linha conectada em modo somente conexão.');
+  console.log('Linha conectada para o piloto.');
+  void processarTesteAutorizado();
 });
 cliente.on('auth_failure', () => {
   console.error('Falha na autenticação da sessão.');
