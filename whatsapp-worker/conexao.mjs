@@ -103,6 +103,38 @@ async function processarTesteAutorizado() {
   }
 }
 
+async function conferirTesteIncerto() {
+  if (encerrando || estado !== 'conectado') return;
+  try {
+    const teste = await rpcTeste('whatsapp_piloto_conferir_teste');
+    if (!teste) return;
+    const inicio = Math.floor(Date.parse(teste.inicio) / 1000) - 2;
+    const fim = Math.ceil(Date.parse(teste.fim) / 1000) + 10;
+    const destinos = new Set([`${teste.numero}@c.us`]);
+    const numeroLocalizado = await cliente.getNumberId(teste.numero).catch(() => null);
+    if (numeroLocalizado?._serialized) destinos.add(numeroLocalizado._serialized);
+    const leituras = await Promise.allSettled([...destinos].flatMap(destino => [
+      cliente.searchMessages(teste.mensagem, { chatId: destino, limit: 50 }),
+      cliente.getChatById(destino).then(chat => chat.fetchMessages({ limit: 50, fromMe: true })),
+    ]));
+    const resultados = leituras.filter(item => item.status === 'fulfilled' && Array.isArray(item.value));
+    const ids = new Set();
+    for (const mensagem of resultados.flatMap(item => item.value)) {
+      const id = mensagem?.id?._serialized ?? mensagem?.id?.$1;
+      if (id?.startsWith('true_') && mensagem.fromMe && destinos.has(mensagem.to) &&
+          mensagem.body === teste.mensagem && mensagem.ack >= 1 &&
+          mensagem.timestamp >= inicio && mensagem.timestamp <= fim) ids.add(id);
+    }
+    const resultado = ids.size === 1 ? 'confirmado' : ids.size > 1 ? 'multiplos_recibos'
+      : resultados.length ? 'sem_recibo' : 'consulta_indisponivel';
+    await rpcTeste('whatsapp_piloto_conferir_teste', {
+      tarefa: teste.id, resultado, comprovante: ids.size === 1 ? [...ids][0] : null,
+    });
+  } catch {
+    console.error('Falha ao conferir o recibo do teste de WhatsApp.');
+  }
+}
+
 cliente.on('qr', qr => void atualizar('aguardando_qr', qr));
 cliente.on('authenticated', () => void atualizar('autenticando'));
 const heartbeat = setInterval(publicar, 12000);
@@ -115,7 +147,7 @@ cliente.on('ready', () => {
   }
   void atualizar('conectado');
   console.log('Linha conectada para o piloto.');
-  void processarTesteAutorizado();
+  void conferirTesteIncerto().then(processarTesteAutorizado);
 });
 cliente.on('auth_failure', () => {
   console.error('Falha na autenticação da sessão.');
