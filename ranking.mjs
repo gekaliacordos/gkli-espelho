@@ -23,7 +23,7 @@ function acordoEmAndamento(acordo) {
     || (!centavos(acordo.saldo) && /ativ|andamento|vigent|abert|atras|pendente|efetivad|firmad/.test(status))
 }
 
-export function calcularRanking(captacao, regua) {
+export function calcularRanking(captacao, regua, { incluirCotasParaPrevia = false } = {}) {
   const { dados } = captacao
   const posicao = hojeEmSaoPaulo(new Date(captacao.captado_em))
   const acordos = new Map()
@@ -76,6 +76,7 @@ export function calcularRanking(captacao, regua) {
     { nome: 'Prazo de cobrança ativa atingido', criterio: regua.fim + ' dias ou mais desde o vencimento' },
   ]
   const grupos = faixas.map(() => new Map())
+  const cotasParaPrevia = []
   const unidades = new Set()
   let excluidas = 0, saldoExcluido = 0, cotasPendentes = 0
   for (const [id, cota] of cotas) {
@@ -89,6 +90,9 @@ export function calcularRanking(captacao, regua) {
     }
     if (pendencias.has(id) || candidatos?.size > 1 || cota.acordoOrigem || /^A/i.test(cota.marcacaoOrigem ?? '')) cotasPendentes++
     const atraso = dia(posicao) - dia(cota.vencimento)
+    if (incluirCotasParaPrevia && atraso >= regua.inicio && atraso < regua.fim &&
+      !pendencias.has(id) && !candidatos?.size && !cota.acordoOrigem &&
+      !/^A/i.test(cota.marcacaoOrigem ?? '')) cotasParaPrevia.push(cota)
     const faixa = grupos[atraso < regua.inicio ? 0 : atraso < regua.fim ? 1 : 2]
     const linha = faixa.get(cota.unidade) ?? { unidade: cota.unidade, quantidade: 0, saldo: 0, primeiro: cota.vencimento, ultimo: cota.vencimento }
     linha.quantidade++
@@ -108,7 +112,7 @@ export function calcularRanking(captacao, regua) {
   if (centavos(dados.totalAbertas) && dados.totalAbertas !== saldo) avisos.push('O saldo calculado diverge do total de cotas abertas informado na captação.')
   const acordosOrdenados = [...acordos.values()].sort((a, b) => ordemUnidade(a.unidade, b.unidade) || ordemUnidade(String(a.numero), String(b.numero)))
   return {
-    posicao, blocos, acordos: acordosOrdenados, avisos, saldo, unidades: unidades.size,
+    posicao, blocos, cotasParaPrevia, acordos: acordosOrdenados, avisos, saldo, unidades: unidades.size,
     quantidade: soma(blocos, 'quantidade'), excluidas, saldoExcluido, saldoFonte: dados.totalAbertas,
     saldoBruto: dados.totalInadimplencia, saldoAcordos: acordosOrdenados.reduce((total, a) => total + (a.saldo ?? 0), 0),
   }

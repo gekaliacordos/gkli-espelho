@@ -1214,6 +1214,49 @@
       destino.replaceChildren(imprimir, documento);
     }
 
+    function exibirPreviaCobranca(destino, captura, regua) {
+      const { cotasParaPrevia, avisos } = calcularRanking(captura, regua, { incluirCotasParaPrevia: true });
+      const grupos = Map.groupBy(cotasParaPrevia, cota => cota.unidade);
+      const contatos = Map.groupBy(captura.dados.contatos ?? [], contato => contato.unidade);
+      const artigo = document.createElement("article");
+      artigo.className = "ranking-document";
+      const adicionar = (pai, tag, texto) => {
+        const elemento = document.createElement(tag);
+        elemento.textContent = texto;
+        pai.append(elemento);
+        return elemento;
+      };
+      adicionar(artigo, "h2", "Prévia do primeiro e-mail de cobrança · " + captura.condominio);
+      adicionar(artigo, "p", "Somente conferência · Captação de " + dataHora.format(new Date(captura.captado_em)));
+      const resumo = adicionar(artigo, "p", "");
+      let comDestinatario = 0;
+      for (const [unidade, cotas] of [...grupos].sort(([a], [b]) => a.localeCompare(b, "pt-BR", { numeric: true }))) {
+        const emails = [...new Set((contatos.get(unidade) ?? []).flatMap(contato =>
+          String(contato.email ?? "").toLowerCase().split(/[;,\s]+/).filter(email => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))))];
+        if (emails.length) comDestinatario++;
+        const painel = adicionar(artigo, "details", "");
+        painel.className = "ranking-secao";
+        adicionar(painel, "summary", unidade + " · " + cotas.length + " cota(s) · " + (emails.join(", ") || "Sem e-mail válido"));
+        const assunto = "Cotas condominiais em aberto – " + captura.condominio + " – Unidade " + unidade;
+        adicionar(painel, "p", "Assunto: " + assunto);
+        painel.append(tabelaRanking(["Recibo", "Vencimento", "Saldo na captação"], cotas.map(cota =>
+          [String(cota.recibo), cota.vencimento.split("-").reverse().join("/"), formatarCentavos(cota.saldo)])));
+        const linhas = cotas.map(cota => "• Vencimento " + cota.vencimento.split("-").reverse().join("/") + " – " + formatarCentavos(cota.saldo));
+        const mensagem = adicionar(painel, "p", [
+          "Olá,",
+          "Na posição de " + dataHora.format(new Date(captura.captado_em)) + ", constavam em aberto as seguintes cotas do condomínio " + captura.condominio + ", unidade " + unidade + ":",
+          ...linhas,
+          "Total na data da consulta: " + formatarCentavos(cotas.reduce((total, cota) => total + cota.saldo, 0)) + ".",
+          "Se você já pagou, pode desconsiderar este aviso. Para consultar o valor atualizado ou verificar opções de regularização, responda a este e-mail.",
+          "Equipe de cobrança GKLI",
+        ].join("\n\n"));
+        mensagem.style.whiteSpace = "pre-wrap";
+      }
+      resumo.textContent = cotasParaPrevia.length + " cota(s) na janela de cobrança · " + comDestinatario + " unidade(s) com e-mail · " + (grupos.size - comDestinatario) + " sem e-mail válido";
+      for (const aviso of avisos) adicionar(artigo, "p", aviso);
+      destino.replaceChildren(artigo);
+    }
+
     async function mostrarRelatorios(token, consultaCaptacoes, consultaAdministradoras, consultaCadastro) {
       relatorios.textContent = "Consultando captações…";
       try {
@@ -1227,7 +1270,7 @@
         conteudo.setAttribute("aria-live", "polite");
         montarColunas(relatorios, "Relatórios", "colunas-relatorios", [relatorio, adm, condominio]);
         relatorios.append(conteudo);
-        opcoesConsulta(relatorio.corpo, [["ranking", "Ranking de inadimplência"]]);
+        opcoesConsulta(relatorio.corpo, [["ranking", "Ranking de inadimplência"], ["previa-cobranca", "Prévia de cobrança por e-mail"]]);
         opcoesConsulta(adm.corpo, [], "Selecione o relatório");
         opcoesConsulta(condominio.corpo, [], "Selecione a administradora");
         let pedido = 0;
@@ -1246,7 +1289,8 @@
         });
         condominio.corpo.addEventListener("change", async () => {
           const atual = ++pedido;
-          conteudo.textContent = "Consultando o ranking…";
+          const previa = relatorio.corpo.value === "previa-cobranca";
+          conteudo.textContent = "Consultando a captação…";
           try {
             const [captura] = await consultarCaptacao(token, condominio.corpo.value);
             if (token !== accessToken || atual !== pedido) return;
@@ -1260,10 +1304,11 @@
               conteudo.textContent = "A régua deste condomínio não foi identificada no cadastro. Confira os prazos antes de gerar o ranking.";
               return;
             }
-            exibirRanking(conteudo, captura, regua, adm.corpo.selectedOptions[0].textContent);
+            if (previa) exibirPreviaCobranca(conteudo, captura, regua);
+            else exibirRanking(conteudo, captura, regua, adm.corpo.selectedOptions[0].textContent);
           } catch {
             if (token !== accessToken || atual !== pedido) return;
-            conteudo.textContent = "Não foi possível carregar o ranking. Selecione o condomínio novamente.";
+            conteudo.textContent = "Não foi possível carregar o relatório. Selecione o condomínio novamente.";
             condominio.corpo.value = "";
           }
         });
