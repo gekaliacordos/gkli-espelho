@@ -25,8 +25,8 @@ Deno.serve(async request => {
 
     const { email, senha } = await request.json();
     if (typeof email !== "string" || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-      typeof senha !== "string" || senha.length < 12 || senha.length > 72) {
-      return json(400, { mensagem: "Confira o e-mail e informe uma senha de 12 a 72 caracteres." });
+      typeof senha !== "string" || senha.length < 6 || new TextEncoder().encode(senha).length > 72) {
+      return json(400, { mensagem: "Confira o e-mail e informe uma senha de pelo menos 6 caracteres." });
     }
 
     const headers = { apikey: serviceKey, Authorization: "Bearer " + serviceKey, "Content-Type": "application/json" };

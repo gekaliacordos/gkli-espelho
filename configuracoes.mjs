@@ -14,7 +14,7 @@ export function configurarAdministracao({ authUrl, apiKey, obterToken, consultar
   const formUsuario = painel.querySelector("#config-editar-usuario");
   const formCarteira = painel.querySelector("#config-editar-carteira");
   const consultas = [
-    ["espelho_usuarios", "id,email,administrador,modulos", "email.asc"],
+    ["espelho_usuarios", "id,email,administrador,modulos,todas_carteiras", "email.asc"],
     ["espelho_carteiras", "id,nome", "nome.asc"],
     ["condominios", "id,nome,administradora", "nome.asc,id.asc"],
     ["espelho_usuarios_carteiras", "usuario_id,carteira_id", "usuario_id.asc,carteira_id.asc"],
@@ -43,13 +43,23 @@ export function configurarAdministracao({ authUrl, apiKey, obterToken, consultar
     }
   }
 
+  function alternarCarteiras() {
+    const opcoes = [...painel.querySelectorAll("#config-carteiras input")];
+    const [todas, ...individuais] = opcoes;
+    for (const individual of individuais) individual.disabled = todas.checked;
+  }
+
   function renderizarUsuario() {
     const [usuarios, carteiras, , vinculos] = dados;
     const selecionado = usuarios.find(item => item.id === usuario.value);
     formUsuario.hidden = !selecionado;
     caixas(painel.querySelector("#config-modulos"), modulosEspelho, selecionado?.modulos ?? []);
-    caixas(painel.querySelector("#config-carteiras"), carteiras.map(item => [item.id, item.nome]),
-      vinculos.filter(item => item.usuario_id === usuario.value).map(item => item.carteira_id));
+    const autorizadas = vinculos.filter(item => item.usuario_id === usuario.value).map(item => item.carteira_id);
+    if (selecionado?.todas_carteiras) autorizadas.push("todas");
+    caixas(painel.querySelector("#config-carteiras"),
+      [["todas", "Todas (inclui carteiras futuras)"], ...carteiras.map(item => [item.id, item.nome])],
+      autorizadas);
+    alternarCarteiras();
   }
 
   function renderizarCarteira() {
@@ -133,8 +143,11 @@ export function configurarAdministracao({ authUrl, apiKey, obterToken, consultar
     return { mensagem: "Carteira criada. Selecione os condomínios que fazem parte dela.", carteiraId: nova.id };
   });
   operacao(formUsuario, async token => {
+    const selecionadas = marcados("config-carteiras");
+    const todas = selecionadas.includes("todas");
     await enviar(token, "/rest/v1/rpc/espelho_salvar_acessos", {
-      usuario: usuario.value, modulos: marcados("config-modulos"), carteiras: marcados("config-carteiras"),
+      usuario: usuario.value, modulos: marcados("config-modulos"),
+      carteiras: todas ? [] : selecionadas, todas_carteiras: todas,
     });
     return { mensagem: "Acessos atualizados." };
   });
@@ -145,6 +158,7 @@ export function configurarAdministracao({ authUrl, apiKey, obterToken, consultar
     return { mensagem: "Condomínios da carteira atualizados." };
   });
 
+  painel.querySelector("#config-carteiras").addEventListener("change", alternarCarteiras);
   usuario.addEventListener("change", renderizarUsuario);
   carteira.addEventListener("change", renderizarCarteira);
   painel.addEventListener("close", () => {
