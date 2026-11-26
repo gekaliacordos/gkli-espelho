@@ -103,24 +103,37 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
     await context.route('**/*', route => ['image', 'font', 'media'].includes(route.request().resourceType()) ? route.abort() : route.continue())
 
     if (consultarAcordos === 'menu') {
-      const tabAcob = await context.newPage();
-      const resposta = await tabAcob.goto(origem + '/acob/frameDefault.jsp', { waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => null);
-      if (resposta && new URL(tabAcob.url()).origin === origem) {
-        await tabAcob.waitForLoadState('load', { timeout: 12000 }).catch(() => {});
+      const menuAcob = pagina.getByText(/^Acob$/i, { exact: true });
+      if (await menuAcob.count() !== 1) return { fichas: [], problema: 'Menu Acob indisponível' };
+      const popup = context.waitForEvent('page', { timeout: 6500 }).catch(() => null);
+      await menuAcob.evaluate(el => el.click());
+      const tabAcob = await popup ?? pagina;
+      await tabAcob.waitForLoadState('domcontentloaded', { timeout: 18000 }).catch(() => {});
+      let selecionouPerfil = false;
+      for (let i = 0; i < 25 && !selecionouPerfil; i++) {
         for (const frame of tabAcob.frames()) {
-          if (!frame.url().startsWith(origem + '/acob/')) continue;
-          const acesso = frame.getByRole('link', { name: /^Acesso COJUR$/i });
-          if (await acesso.count() === 1 && await acesso.isVisible()) {
-            await acesso.click({ timeout: 5000 }).catch(() => {});
-            await tabAcob.waitForLoadState('load', { timeout: 12000 }).catch(() => {});
+          if (!frame.url().startsWith(origem + '/acob')) continue;
+          const acesso = frame.getByText(/^Acesso\s+COJUR$/i, { exact: true });
+          if (await acesso.count() === 1) {
+            await acesso.evaluate(el => el.click());
+            selecionouPerfil = true;
             break;
           }
         }
+        if (!selecionouPerfil) await new Promise(resolve => setTimeout(resolve, 300));
       }
-
-      const navAcob = tabAcob.frames().find(frame => frame.url().startsWith(origem + '/acob/NAV.jsp'));
-      const buscaAcordos = navAcob?.getByText(/^Busca Acordos$/i, { exact: true });
-      if (await buscaAcordos?.count() === 1) await buscaAcordos.evaluate(el => el.click());
+      const abrirBusca = async () => {
+        for (let i = 0; i < 35; i++) {
+          const nav = tabAcob.frames().find(frame => frame.url().startsWith(origem + '/acob/NAV.jsp'));
+          const busca = nav?.getByText(/^Busca Acordos$/i, { exact: true });
+          if (await busca?.count() === 1) {
+            await busca.evaluate(el => el.click());
+            return;
+          }
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      };
+      await abrirBusca();
       let formularios = [];
       for (let i = 0; i < 25 && !formularios.length; i++) {
         for (const frame of tabAcob.frames()) {
@@ -146,9 +159,16 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
       const codigos = ['1415010','1414133','1404546','1412323','1365663','1413311'];
       if (formularios.some(f => f.pagina === '/acob/buscaAcordo.jsp')) {
         for (const numero of codigos) {
-          const consulta = await context.newPage();
           try {
-            await consulta.goto(origem + '/acob/buscaAcordo.jsp', { waitUntil: 'domcontentloaded', timeout: 25000 });
+            let consulta = tabAcob.frames().find(f => f.url().startsWith(origem+'/acob/buscaAcordo.jsp'));
+            if (!consulta) {
+              await abrirBusca();
+              for (let i = 0; i < 40 && !consulta; i++) {
+                consulta = tabAcob.frames().find(f => f.url().startsWith(origem+'/acob/buscaAcordo.jsp'));
+                if (!consulta) await new Promise(resolve => setTimeout(resolve, 250));
+              }
+            }
+            if (!consulta) throw Error('Formulário ausente');
             const form = consulta.locator('form[action$="/BuscaAcordo"]');
             if (await form.count() !== 1 || new URL(consulta.url()).origin !== origem) throw Error('Busca inesperada');
             await form.locator('input[name=pre_codigo]').fill(codigo);
@@ -157,11 +177,15 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
               selecionada: el.selectedOptions[0]?.textContent.trim(),
               opcoes: [...el.options].map(o => o.textContent.trim()),
             }));
+            if (!empresa.opcoes.length) {
+              consultas.push({ numero, empresa, erro: 'Acob sem empresa disponível na sessão' });
+              break;
+            }
             const resultado = consulta.waitForURL(url => url.origin === origem &&
               url.pathname === '/acob/servlet/BuscaAcordo', { waitUntil: 'domcontentloaded', timeout: 25000 });
             await Promise.all([resultado, form.getByRole('button', { name: 'Buscar', exact: true }).click()]);
             await consulta.waitForLoadState('load', { timeout: 12000 }).catch(() => {});
-            const paginas = await Promise.all(consulta.frames().filter(f => f.url().startsWith(origem+'/acob/')).map(frame => frame.locator('body').evaluate((body, numero) => ({
+            const paginas = await Promise.all(tabAcob.frames().filter(f => f.url().startsWith(origem+'/acob/servlet/BuscaAcordo')).map(frame => frame.locator('body').evaluate((body, numero) => ({
               caminho: location.pathname,
               texto: body.innerText.trim().slice(0,1100),
               temScript: Boolean(body.querySelector('script')),
@@ -181,10 +205,9 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
             }), numero).catch(() => null)));
             consultas.push({ numero, empresa, paginas });
           } catch { consultas.push({ numero, erro: 'Busca específica indisponível' }); }
-          finally { await consulta.close(); }
+
         }
       }
-      await pagina.locator('a[href="/relatorios/CotasInadimplentes.do"]').first().waitFor({ state: 'attached' });
       const navegacao = await Promise.all([...pagina.frames(), ...tabAcob.frames()].map(frame => frame.locator('body').evaluate(body => {
         const caminho = valor => {
           try {
@@ -208,7 +231,7 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
               e.categorias || /acob|cojur|acord|relat|inadim|recibo|boleto|financeir|cobran[cç]|demonstrat|moviment|document|presta[cç]|busca/i.test(e.titulo)),
         };
       }).catch(() => null)));
-      return { fichas: [], navegacao, acobHttp: resposta?.status() ?? null, formularios, consultas };
+      return { fichas: [], navegacao, selecionouPerfil, formularios, consultas };
     }
 
     async function menu(pathname) {
