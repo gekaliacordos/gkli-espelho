@@ -142,6 +142,38 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
         }
         if (!formularios.length) await new Promise(resolve => setTimeout(resolve, 350));
       }
+      const consultas = [];
+      const codigos = ['1415010','1414133','1404546','1412323','1365663','1413311'];
+      if (formularios.some(f => f.pagina === '/acob/buscaAcordo.jsp')) {
+        for (const numero of codigos) {
+          const consulta = await context.newPage();
+          try {
+            await consulta.goto(origem + '/acob/buscaAcordo.jsp', { waitUntil: 'domcontentloaded', timeout: 25000 });
+            const form = consulta.locator('form[action$="/BuscaAcordo"]');
+            if (await form.count() !== 1 || new URL(consulta.url()).origin !== origem) throw Error('Busca inesperada');
+            await form.locator('input[name=pre_codigo]').fill(codigo);
+            await form.locator('input[name=aco_recNum]').fill(numero);
+            const resultado = consulta.waitForURL(url => url.origin === origem &&
+              url.pathname === '/acob/servlet/BuscaAcordo', { waitUntil: 'domcontentloaded', timeout: 25000 });
+            await Promise.all([resultado, form.getByRole('button', { name: 'Buscar', exact: true }).click()]);
+            const pagina = await consulta.locator('body').evaluate((body, numero) => ({
+              resumo: body.innerText.split('\n').map(t => t.trim()).filter(t =>
+                /nenhum|n[aã]o (?:foi|encontr)|sem (?:acord|perm)|ocorr[eê]ncia|erro|detalhe|selecion/i.test(t)).slice(0,20),
+              tabelas: [...body.querySelectorAll('table')].filter(t => !t.querySelector('table'))
+                .map(t => [...t.rows].map(r => [...r.cells].map(c => c.innerText.trim())))
+                .filter(linhas => linhas.some(l => l.some(c => c.includes(numero) || /acordo|juros|multa|honor|desconto|valor/i.test(c)))),
+              links: [...body.querySelectorAll('a,button,input[type=button],input[type=submit]')].map(e => ({
+                texto: (e.innerText || e.value || e.title || e.textContent || '').trim(),
+                href: e.getAttribute('href'),
+                temAcao: Boolean(e.getAttribute('onclick')),
+                associado: Boolean(e.closest('tr')?.innerText.includes(numero)),
+              })).filter(e => e.associado || /demonstr|mem[oó]ria|detalhe|modelo|termo|planilha/i.test(e.texto)),
+            }), numero);
+            consultas.push({ numero, ...pagina });
+          } catch { consultas.push({ numero, erro: 'Busca específica indisponível' }); }
+          finally { await consulta.close(); }
+        }
+      }
       await pagina.locator('a[href="/relatorios/CotasInadimplentes.do"]').first().waitFor({ state: 'attached' });
       const navegacao = await Promise.all([...pagina.frames(), ...tabAcob.frames()].map(frame => frame.locator('body').evaluate(body => {
         const caminho = valor => {
@@ -166,7 +198,7 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
               e.categorias || /acob|cojur|acord|relat|inadim|recibo|boleto|financeir|cobran[cç]|demonstrat|moviment|document|presta[cç]|busca/i.test(e.titulo)),
         };
       }).catch(() => null)));
-      return { fichas: [], navegacao, acobHttp: resposta?.status() ?? null, formularios };
+      return { fichas: [], navegacao, acobHttp: resposta?.status() ?? null, formularios, consultas };
     }
 
     async function menu(pathname) {
