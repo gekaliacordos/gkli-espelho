@@ -35,7 +35,7 @@ async function ler(frame, ficha = false) {
     const texto = body.innerText
     return {
     rotulosLinks: [...body.querySelectorAll('a[href], button')].map(a => ({
-      rotulo: a.innerText.trim() || a.title || a.getAttribute('aria-label'),
+      rotulo: a.innerText.trim() || a.title || a.getAttribute('aria-label') || a.textContent.trim(),
       caminho: a.tagName === 'A' && a.protocol === location.protocol && a.origin === location.origin ? a.pathname : null,
     })).filter(item => item.rotulo),
     linhasTexto: texto.split('\n').map(linha => linha.trim()).filter(linha =>
@@ -197,7 +197,19 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
           const comp = links(ficha, caminhos.composicao).find(link =>
             link.searchParams.get('codAcordo') === numero && link.searchParams.get('codUnidade') === unidade);
           const extrair = ({ linhas, rotulosLinks, linhasTexto }) => ({ linhas, rotulosLinks, linhasTexto });
-          return { numero, unidade, ficha: extrair(ficha), composicao: comp ? extrair(await visitar(tab, comp)) : null };
+          const composicao = comp ? await visitar(tab, comp) : null;
+          const recibos = [];
+          for (const link of composicao ? links(composicao, '/relatorios/HistoricoRecibo.do') : []) {
+            const parametros = [...link.searchParams.keys()];
+            if (link.origin !== origem || link.searchParams.get('codCondo') !== codigo ||
+              (link.searchParams.has('codUnidade') && link.searchParams.get('codUnidade') !== unidade)) {
+              recibos.push({ erro: 'Histórico sem vínculo de condomínio verificável', parametros });
+              continue;
+            }
+            try { recibos.push(extrair(await visitar(tab, link))); }
+            catch { recibos.push({ erro: 'Histórico indisponível', parametros }); }
+          }
+          return { numero, unidade, ficha: extrair(ficha), composicao: composicao ? extrair(composicao) : null, recibos };
         } catch {
           return { numero, erro: 'Ficha indisponível' };
         }
