@@ -10,7 +10,7 @@ try {
   const { usuario, senha } = JSON.parse(Buffer.from(process.env.ESPELHO_PORTAIS_B64, 'base64')).lello.PADRAO;
   const resultado = await coletarEspelhoLello(
     { codigo: '182', nome: 'Bosque Marajoara', usuario, senha },
-    AbortSignal.timeout(240_000), () => {}, undefined, autorizados,
+    AbortSignal.timeout(240_000), () => {}, undefined, process.argv.includes('--menu') ? 'menu' : autorizados,
   );
   const chave = randomBytes(32), iv = randomBytes(12);
   const cifrador = createCipheriv('aes-256-gcm', chave, iv);

@@ -102,6 +102,32 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
     if (!padrao.test(cabecalho) || !normalizar(cabecalho).includes(normalizar(busca))) throw Error('Condomínio do portal diverge do cadastro.')
     await context.route('**/*', route => ['image', 'font', 'media'].includes(route.request().resourceType()) ? route.abort() : route.continue())
 
+    if (consultarAcordos === 'menu') {
+      await pagina.locator('a[href="/relatorios/CotasInadimplentes.do"]').first().waitFor({ state: 'attached' });
+      const navegacao = await Promise.all(pagina.frames().map(frame => frame.locator('body').evaluate(body => {
+        const caminho = valor => {
+          try {
+            if (!valor || valor.startsWith('#')) return null;
+            const url = new URL(valor, document.baseURI);
+            return url.origin === location.origin && url.protocol === 'https:' ? url.pathname : null;
+          } catch { return null; }
+        };
+        return {
+          pagina: location.pathname,
+          elementos: [...body.querySelectorAll('a[href],button,[role=menuitem],iframe[src],option,[onclick]')]
+            .map(e => ({
+              titulo: (e.getAttribute('title') || e.getAttribute('aria-label') || e.querySelector('img[alt]')?.getAttribute('alt') ||
+                e.textContent.trim().replace(/\s+/g,' ')).slice(0,140),
+              caminho: caminho(e.getAttribute('href') || e.getAttribute('src')),
+              categorias: (e.getAttribute('onclick') || '').match(/\b(?:Acordo|Financeir|Demonstrativo|Encargo|Memoria|Calculo)\w*/gi),
+            }))
+            .filter(e => e.caminho && /acord|relat|inadim|recibo|boleto|financeir|cobranc|dinamic|moviment|document|presta/i.test(e.caminho) ||
+              e.categorias || /acord|relat|inadim|recibo|boleto|financeir|cobran[cç]|demonstrat|moviment|document|presta[cç]/i.test(e.titulo)),
+        };
+      }).catch(() => null)));
+      return { fichas: [], navegacao };
+    }
+
     async function menu(pathname) {
       await pagina.locator(`a[href="${pathname}"]`).first().evaluate(a => a.click())
       for (let i = 0; i < 100; i++) {
