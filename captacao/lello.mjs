@@ -178,43 +178,22 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
 
     if (consultarAcordos) {
       const unidades = new Map(consultarAcordos);
-      const referencias = new Map(urlsAtivos.map(url => [url.searchParams.get('codAcordo'), url]));
-      const faltam = new Set([...unidades].filter(([numero]) => !referencias.has(numero)).map(([, unidade]) => unidade));
-      const historicos = await lote(urlsHistoricos.filter(url => faltam.has(url.searchParams.get('codUnidade'))), visitar);
-      for (const tela of historicos) for (const url of links(tela, caminhos.acordo)) {
-        const numero = url.searchParams.get('codAcordo');
-        if (unidades.has(numero) && !referencias.has(numero)) referencias.set(numero, url);
-      }
-      const fichas = await lote([...unidades].filter(([numero]) => referencias.has(numero)).map(([numero]) => referencias.get(numero)), async (tab, url) => {
+      const historicos = await lote(urlsHistoricos.filter(url => [...unidades.values()].includes(url.searchParams.get('codUnidade'))), visitar);
+      const urls = [...new Map([...urlsAtivos, ...historicos.flatMap(tela => links(tela, caminhos.acordo))]
+        .filter(url => unidades.get(url.searchParams.get('codAcordo')) === url.searchParams.get('codUnidade'))
+        .map(url => [url.href, url])).values()];
+      const fichas = await lote(urls, async (tab, url) => {
         const numero = url.searchParams.get('codAcordo'), unidade = unidades.get(numero);
-        if (url.searchParams.get('codUnidade') !== unidade) return { numero, erro: 'Unidade divergente' };
-        url.searchParams.delete('numrecibo');
-        url.searchParams.delete('detalheAcordo');
+        const parametros = [...url.searchParams.keys()];
         try {
-          const ficha = await visitar(tab, url);
-          if (!ficha.linhas.some(r => r[0] === 'Acordo Número' && r[1] === numero) ||
-              !ficha.linhas.some(r => r[0] === 'Unidade' && r[1] === unidade)) return { numero, erro: 'Identidade divergente' };
-          const comp = links(ficha, caminhos.composicao).find(link =>
-            link.searchParams.get('codAcordo') === numero && link.searchParams.get('codUnidade') === unidade);
-          const extrair = ({ linhas, rotulosLinks, linhasTexto }) => ({ linhas, rotulosLinks, linhasTexto });
-          const composicao = comp ? await visitar(tab, comp) : null;
-          const recibos = [];
-          for (const link of composicao ? links(composicao, '/relatorios/HistoricoRecibo.do') : []) {
-            const parametros = [...link.searchParams.keys()];
-            if (link.origin !== origem || link.searchParams.get('codCondo') !== codigo ||
-              (link.searchParams.has('codUnidade') && link.searchParams.get('codUnidade') !== unidade)) {
-              recibos.push({ erro: 'Histórico sem vínculo de condomínio verificável', parametros });
-              continue;
-            }
-            try { recibos.push(extrair(await visitar(tab, link))); }
-            catch { recibos.push({ erro: 'Histórico indisponível', parametros }); }
-          }
-          return { numero, unidade, ficha: extrair(ficha), composicao: composicao ? extrair(composicao) : null, recibos };
-        } catch {
-          return { numero, erro: 'Ficha indisponível' };
-        }
+          const tela = await visitar(tab, url);
+          if (!tela.linhas.some(r => r[0] === 'Acordo Número' && r[1] === numero) ||
+              !tela.linhas.some(r => r[0] === 'Unidade' && r[1] === unidade)) return { numero, erro: 'Identidade divergente', parametros };
+          const { linhas, rotulosLinks, linhasTexto } = tela;
+          return { numero, unidade, parametros, ficha: { linhas, rotulosLinks, linhasTexto } };
+        } catch { return { numero, erro: 'Ficha indisponível', parametros }; }
       });
-      return { fichas, ausentes: [...unidades.keys()].filter(numero => !referencias.has(numero)),
+      return { fichas, ausentes: [...unidades.keys()].filter(numero => !urls.some(url => url.searchParams.get('codAcordo') === numero)),
         menus: (await ler(pagina)).rotulosLinks.filter(item =>
           /acordo|financ|demonstrativ|posi[çc][aã]o|repasse/i.test(item.rotulo)) };
     }
