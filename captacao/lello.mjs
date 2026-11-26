@@ -185,12 +185,18 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
             if (await form.count() !== 1 || new URL(consulta.url()).origin !== origem) throw Error('Busca inesperada');
             await form.locator('input[name=pre_codigo]').fill(codigo);
             await form.locator('input[name=aco_recNum]').fill(numero);
+            await form.locator('select[name=esc_empresa] option').first().waitFor({ state: 'attached', timeout: 16000 }).catch(() => {});
             const empresa = await form.locator('select[name=esc_empresa]').evaluate(el => ({
               selecionada: el.selectedOptions[0]?.textContent.trim(),
               opcoes: [...el.options].map(o => o.textContent.trim()),
             }));
             if (!empresa.opcoes.length) {
-              consultas.push({ numero, empresa, erro: 'Acob sem empresa disponível na sessão' });
+              const mensagens = await Promise.all(tabAcob.frames().filter(f => f.url().startsWith(origem + '/acob/')).map(async f => ({
+                caminho: new URL(f.url()).pathname,
+                avisos: await f.locator('body').innerText({ timeout: 2000 }).then(t => t.split('\n').map(x=>x.trim()).filter(x =>
+                  /login expirou|sess[aã]o expir|acesso negado|n[aã]o permitido|falha|fora do ar|erro|sem permiss[aã]o/i.test(x)).map(x=>x.slice(0,150)).slice(0,8)).catch(() => []),
+              })));
+              consultas.push({ numero, empresa, erro: 'Acob sem empresa disponível na sessão', mensagens });
               break;
             }
             const resultado = consulta.waitForURL(url => url.origin === origem &&
