@@ -1,5 +1,8 @@
 name: Captar Lello
 on:
+  push:
+    branches:
+      - codex/captacao-bosque-marajoara-20261126
   workflow_dispatch:
     inputs:
       condominio:
@@ -42,6 +45,6 @@ jobs:
           if [ "$LELLO_CONDOMINIO" = "Todos" ]; then LELLO_CONDOMINIO=""; fi
           node captacao/executar-nuvem.mjs lello "$LELLO_CONDOMINIO"
         env:
-          LELLO_CONDOMINIO: ${{ inputs.condominio }}
+          LELLO_CONDOMINIO: ${{ github.event_name == 'push' && 'Bosque Marajoara' || inputs.condominio }}
           ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_COLETORES_DATABASE_URL }}
           ESPELHO_PORTAIS_B64: ${{ secrets.ESPELHO_PORTAIS_V2 }}
