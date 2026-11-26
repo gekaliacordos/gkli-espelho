@@ -34,6 +34,12 @@ async function ler(frame, ficha = false) {
       .map(t => [...t.rows].map(r => [...r.cells].map(c => c.innerText.trim())))
     const texto = body.innerText
     return {
+    rotulosLinks: [...body.querySelectorAll('a[href], button')].map(a => ({
+      rotulo: a.innerText.trim() || a.title || a.getAttribute('aria-label'),
+      caminho: a.tagName === 'A' && a.protocol === location.protocol && a.origin === location.origin ? a.pathname : null,
+    })).filter(item => item.rotulo),
+    linhasTexto: texto.split('\n').map(linha => linha.trim()).filter(linha =>
+      /juros|multa|corre[çc][aã]o|honor[áa]ri|despesas?|descontos?|financeir|composi[çc][aã]o|encargos|negocia|resumo/i.test(linha)),
     pedeLogin: Boolean(body.querySelector('input[type=password]')),
     linhas: tabelas.flat(),
     links: [...body.querySelectorAll('a[href]')].map(a => a.href),
@@ -63,7 +69,7 @@ export async function coletarEtapaLello(etapas, etapa, urls, dependencia, progre
   return itens
 }
 
-export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario, senha }, signal, progresso = () => {}, etapas) {
+export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario, senha }, signal, progresso = () => {}, etapas, consultarAcordos) {
   if (!/^\d+$/.test(codigo) || !nome || !usuario || !senha) throw Error('Acesso ou alvo da Lello incompleto.')
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
   const fechar = () => { void browser.close().catch(() => {}) }
@@ -168,6 +174,37 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
     const urlsAtivos = links(ativos, caminhos.acordo)
     if (!urlsAtivos.length && !ativos.semAcordos) {
       throw Error('A ausência de acordos ativos não foi confirmada no relatório.')
+    }
+
+    if (consultarAcordos) {
+      const unidades = new Map(consultarAcordos);
+      const referencias = new Map(urlsAtivos.map(url => [url.searchParams.get('codAcordo'), url]));
+      const faltam = new Set([...unidades].filter(([numero]) => !referencias.has(numero)).map(([, unidade]) => unidade));
+      const historicos = await lote(urlsHistoricos.filter(url => faltam.has(url.searchParams.get('codUnidade'))), visitar);
+      for (const tela of historicos) for (const url of links(tela, caminhos.acordo)) {
+        const numero = url.searchParams.get('codAcordo');
+        if (unidades.has(numero) && !referencias.has(numero)) referencias.set(numero, url);
+      }
+      const fichas = await lote([...unidades].filter(([numero]) => referencias.has(numero)).map(([numero]) => referencias.get(numero)), async (tab, url) => {
+        const numero = url.searchParams.get('codAcordo'), unidade = unidades.get(numero);
+        if (url.searchParams.get('codUnidade') !== unidade) return { numero, erro: 'Unidade divergente' };
+        url.searchParams.delete('numrecibo');
+        url.searchParams.delete('detalheAcordo');
+        try {
+          const ficha = await visitar(tab, url);
+          if (!ficha.linhas.some(r => r[0] === 'Acordo Número' && r[1] === numero) ||
+              !ficha.linhas.some(r => r[0] === 'Unidade' && r[1] === unidade)) return { numero, erro: 'Identidade divergente' };
+          const comp = links(ficha, caminhos.composicao).find(link =>
+            link.searchParams.get('codAcordo') === numero && link.searchParams.get('codUnidade') === unidade);
+          const extrair = ({ linhas, rotulosLinks, linhasTexto }) => ({ linhas, rotulosLinks, linhasTexto });
+          return { numero, unidade, ficha: extrair(ficha), composicao: comp ? extrair(await visitar(tab, comp)) : null };
+        } catch {
+          return { numero, erro: 'Ficha indisponível' };
+        }
+      });
+      return { fichas, ausentes: [...unidades.keys()].filter(numero => !referencias.has(numero)),
+        menus: (await ler(pagina)).rotulosLinks.filter(item =>
+          /acordo|financ|demonstrativ|posi[çc][aã]o|repasse/i.test(item.rotulo)) };
     }
 
     const urlsCotas = links(indiceCotas, caminhos.cotas)
