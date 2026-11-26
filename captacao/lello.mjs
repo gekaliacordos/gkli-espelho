@@ -187,10 +187,10 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
         const parametros = [...url.searchParams.keys()];
         try {
           const tela = await visitar(tab, url);
-          if (!tela.linhas.some(r => r[0] === 'Acordo Número' && r[1] === numero) ||
-              !tela.linhas.some(r => r[0] === 'Unidade' && r[1] === unidade)) return { numero, erro: 'Identidade divergente', parametros };
+          const identidade = tela.linhas.some(r => r[0] === 'Acordo Número' && r[1] === numero) &&
+              tela.linhas.some(r => r[0] === 'Unidade' && r[1] === unidade);
           const { linhas, rotulosLinks, linhasTexto } = tela;
-          return { numero, unidade, parametros, ficha: { linhas, rotulosLinks, linhasTexto } };
+          return { numero, unidade, parametros, identidade, ficha: { linhas, rotulosLinks, linhasTexto } };
         } catch { return { numero, erro: 'Ficha indisponível', parametros }; }
       });
       return { fichas, ausentes: [...unidades.keys()].filter(numero => !urls.some(url => url.searchParams.get('codAcordo') === numero)),
