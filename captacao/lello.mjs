@@ -168,9 +168,10 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
         if (!formularios.length) await new Promise(resolve => setTimeout(resolve, 350));
       }
       const consultas = [];
-      const codigos = ['1415010','1414133','1404546','1412323','1365663','1413311'];
+      const criterios = ['empresa-e-acordo','empresa-e-unidade'];
       if (formularios.some(f => f.pagina === '/acob/buscaAcordo.jsp')) {
-        for (const numero of codigos) {
+        for (const criterio of criterios) {
+          const numero = '1365663';
           try {
             let consulta = tabAcob.frames().find(f => f.url().startsWith(origem+'/acob/buscaAcordo.jsp'));
             if (!consulta) {
@@ -184,7 +185,10 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
             const form = consulta.locator('form[action$="/BuscaAcordo"]');
             if (await form.count() !== 1 || new URL(consulta.url()).origin !== origem) throw Error('Busca inesperada');
             await form.locator('input[name=pre_codigo]').fill(codigo);
-            await form.locator('input[name=aco_recNum]').fill(numero);
+            await form.locator('input[name=aco_recNum]').fill(criterio === 'empresa-e-acordo' ? numero : '');
+            await form.locator('input[name=dev_codigo]').fill(criterio === 'empresa-e-unidade' ? '00132D' : '');
+            await form.locator('input[name=aco_dt_cria1]').fill('');
+            await form.locator('input[name=aco_dt_cria2]').fill('');
             await form.locator('select[name=esc_empresa] option').first().waitFor({ state: 'attached', timeout: 16000 }).catch(() => {});
             const empresa = await form.locator('select[name=esc_empresa]').evaluate(el => ({
               selecionada: el.selectedOptions[0]?.textContent.trim(),
@@ -198,6 +202,9 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
               })));
               consultas.push({ numero, empresa, erro: 'Acob sem empresa disponível na sessão', mensagens });
               break;
+            }
+            if (empresa.opcoes.includes('LELLO CONDOMINIOS LTDA')) {
+              await form.locator('select[name=esc_empresa]').selectOption({ label: 'LELLO CONDOMINIOS LTDA' });
             }
             const resultado = consulta.waitForURL(url => url.origin === origem &&
               url.pathname === '/acob/servlet/BuscaAcordo', { waitUntil: 'domcontentloaded', timeout: 25000 });
@@ -219,9 +226,11 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
                 href: e.getAttribute('href'),
                 temAcao: Boolean(e.getAttribute('onclick')),
                 associado: Boolean(e.closest('tr')?.innerText.includes(numero)),
+                buscaSegura: e.tagName === 'A' && /^(?:ver|exibir|consultar|detalhe|1365663)$/i.test((e.innerText || e.title || '').trim()),
+
               })).filter(e => e.associado || /demonstr|mem[oó]ria|detalhe|modelo|termo|planilha/i.test(e.texto)),
             }), numero).catch(() => null)));
-            consultas.push({ numero, empresa, paginas });
+            consultas.push({ numero, criterio, empresa, paginas });
           } catch { consultas.push({ numero, erro: 'Busca específica indisponível' }); }
 
         }
