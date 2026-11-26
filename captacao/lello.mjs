@@ -103,8 +103,23 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
     await context.route('**/*', route => ['image', 'font', 'media'].includes(route.request().resourceType()) ? route.abort() : route.continue())
 
     if (consultarAcordos === 'menu') {
+      const tabAcob = await context.newPage();
+      const resposta = await tabAcob.goto(origem + '/acob/frameDefault.jsp', { waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => null);
+      if (resposta && new URL(tabAcob.url()).origin === origem) {
+        await tabAcob.waitForLoadState('load', { timeout: 12000 }).catch(() => {});
+        for (const frame of tabAcob.frames()) {
+          if (!frame.url().startsWith(origem + '/acob/')) continue;
+          const acesso = frame.getByRole('link', { name: /^Acesso COJUR$/i });
+          if (await acesso.count() === 1 && await acesso.isVisible()) {
+            await acesso.click({ timeout: 5000 }).catch(() => {});
+            await tabAcob.waitForLoadState('load', { timeout: 12000 }).catch(() => {});
+            break;
+          }
+        }
+      }
+
       await pagina.locator('a[href="/relatorios/CotasInadimplentes.do"]').first().waitFor({ state: 'attached' });
-      const navegacao = await Promise.all(pagina.frames().map(frame => frame.locator('body').evaluate(body => {
+      const navegacao = await Promise.all([...pagina.frames(), ...tabAcob.frames()].map(frame => frame.locator('body').evaluate(body => {
         const caminho = valor => {
           try {
             if (!valor || valor.startsWith('#')) return null;
@@ -114,6 +129,8 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
         };
         return {
           pagina: location.pathname,
+          acesso: /acesso negado|acesso ao recurso n[aã]o permitido|sem permiss[aã]o|n[aã]o autorizado|usu[aá]rio nulo/i.test(body.innerText) ? 'recusado' : body.querySelector('input[type=password]') ? 'login' : 'página',
+
           elementos: [...body.querySelectorAll('a[href],button,[role=menuitem],iframe[src],option,[onclick]')]
             .map(e => ({
               titulo: (e.getAttribute('title') || e.getAttribute('aria-label') || e.querySelector('img[alt]')?.getAttribute('alt') ||
@@ -121,11 +138,11 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
               caminho: caminho(e.getAttribute('href') || e.getAttribute('src')),
               categorias: (e.getAttribute('onclick') || '').match(/\b(?:Acordo|Financeir|Demonstrativo|Encargo|Memoria|Calculo)\w*/gi),
             }))
-            .filter(e => e.caminho && /acord|relat|inadim|recibo|boleto|financeir|cobranc|dinamic|moviment|document|presta/i.test(e.caminho) ||
-              e.categorias || /acord|relat|inadim|recibo|boleto|financeir|cobran[cç]|demonstrat|moviment|document|presta[cç]/i.test(e.titulo)),
+            .filter(e => e.caminho && /acob|cojur|acord|relat|inadim|recibo|boleto|financeir|cobranc|dinamic|moviment|document|presta/i.test(e.caminho) ||
+              e.categorias || /acob|cojur|acord|relat|inadim|recibo|boleto|financeir|cobran[cç]|demonstrat|moviment|document|presta[cç]|busca/i.test(e.titulo)),
         };
       }).catch(() => null)));
-      return { fichas: [], navegacao };
+      return { fichas: [], navegacao, acobHttp: resposta?.status() ?? null };
     }
 
     async function menu(pathname) {
