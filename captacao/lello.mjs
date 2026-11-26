@@ -103,10 +103,22 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
     await context.route('**/*', route => ['image', 'font', 'media'].includes(route.request().resourceType()) ? route.abort() : route.continue())
 
     if (consultarAcordos === 'menu') {
-      const menuAcob = pagina.locator('a[href="/acob"], a[href="/acob/"]').first();
-      if (!await menuAcob.count()) return { fichas: [], problema: 'Menu Acob indisponível' };
-      const popup = context.waitForEvent('page', { timeout: 6500 }).catch(() => null);
-      await menuAcob.evaluate(el => el.click());
+      const popup = context.waitForEvent('page', { timeout: 15000 }).catch(() => null);
+      let encontrou = false;
+      for (let i = 0; i < 24 && !encontrou; i++) {
+        for (const frame of pagina.frames()) {
+          if (!frame.url().startsWith(origem + '/menuPortal2/')) continue;
+          encontrou = await frame.locator('a[href]').evaluateAll((ancoras, portal) => {
+            const link = ancoras.find(el => el.origin === portal && /^\/acob\/?$/i.test(el.pathname));
+            if (!link) return false;
+            link.click();
+            return true;
+          }, origem).catch(() => false);
+          if (encontrou) break;
+        }
+        if (!encontrou) await new Promise(resolve => setTimeout(resolve, 350));
+      }
+      if (!encontrou) return { fichas: [], problema: 'Menu Acob indisponível' };
       const tabAcob = await popup ?? pagina;
       await tabAcob.waitForLoadState('domcontentloaded', { timeout: 18000 }).catch(() => {});
       let selecionouPerfil = false;
