@@ -118,6 +118,30 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
         }
       }
 
+      const navAcob = tabAcob.frames().find(frame => frame.url().startsWith(origem + '/acob/NAV.jsp'));
+      const buscaAcordos = navAcob?.getByText(/^Busca Acordos$/i, { exact: true });
+      if (await buscaAcordos?.count() === 1) await buscaAcordos.evaluate(el => el.click());
+      let formularios = [];
+      for (let i = 0; i < 25 && !formularios.length; i++) {
+        for (const frame of tabAcob.frames()) {
+          if (!frame.url().startsWith(origem + '/acob/') || /NAV.jsp|welcome.jsp|BuscaPerfil|frameDefault.jsp/.test(frame.url())) continue;
+          const destino = await frame.locator('body').evaluate(body => ({
+            pagina: location.pathname,
+            aspecto: body.innerText.split('\n').map(t => t.trim()).filter(t =>
+              /acordo|busca|refer[eê]ncia|unidade|pr[eé]dio|c[oó]digo|acesso|permiss/i.test(t)).slice(0,20),
+            forms: [...body.querySelectorAll('form')].map(form => ({
+              action: new URL(form.action).pathname,
+              inputs: [...form.elements].map(el => ({
+                name: el.name, id: el.id, type: el.type,
+                nome: /button|submit/.test(el.type) ? (el.value || el.textContent.trim()) : '',
+                label: el.labels?.[0]?.innerText.trim() || el.getAttribute('placeholder') || '',
+              })),
+            })),
+          })).catch(() => null);
+          if (destino) formularios.push(destino);
+        }
+        if (!formularios.length) await new Promise(resolve => setTimeout(resolve, 350));
+      }
       await pagina.locator('a[href="/relatorios/CotasInadimplentes.do"]').first().waitFor({ state: 'attached' });
       const navegacao = await Promise.all([...pagina.frames(), ...tabAcob.frames()].map(frame => frame.locator('body').evaluate(body => {
         const caminho = valor => {
@@ -142,7 +166,7 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
               e.categorias || /acob|cojur|acord|relat|inadim|recibo|boleto|financeir|cobran[cç]|demonstrat|moviment|document|presta[cç]|busca/i.test(e.titulo)),
         };
       }).catch(() => null)));
-      return { fichas: [], navegacao, acobHttp: resposta?.status() ?? null };
+      return { fichas: [], navegacao, acobHttp: resposta?.status() ?? null, formularios };
     }
 
     async function menu(pathname) {
