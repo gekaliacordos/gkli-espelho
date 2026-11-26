@@ -103,8 +103,8 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
     await context.route('**/*', route => ['image', 'font', 'media'].includes(route.request().resourceType()) ? route.abort() : route.continue())
 
     if (consultarAcordos === 'menu') {
-      const menuAcob = pagina.getByText(/^Acob$/i, { exact: true });
-      if (await menuAcob.count() !== 1) return { fichas: [], problema: 'Menu Acob indisponível' };
+      const menuAcob = pagina.locator('a[href="/acob"], a[href="/acob/"]').first();
+      if (!await menuAcob.count()) return { fichas: [], problema: 'Menu Acob indisponível' };
       const popup = context.waitForEvent('page', { timeout: 6500 }).catch(() => null);
       await menuAcob.evaluate(el => el.click());
       const tabAcob = await popup ?? pagina;
