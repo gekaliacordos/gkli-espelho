@@ -153,10 +153,20 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
             if (await form.count() !== 1 || new URL(consulta.url()).origin !== origem) throw Error('Busca inesperada');
             await form.locator('input[name=pre_codigo]').fill(codigo);
             await form.locator('input[name=aco_recNum]').fill(numero);
+            const empresa = await form.locator('select[name=esc_empresa]').evaluate(el => ({
+              selecionada: el.selectedOptions[0]?.textContent.trim(),
+              opcoes: [...el.options].map(o => o.textContent.trim()),
+            }));
             const resultado = consulta.waitForURL(url => url.origin === origem &&
               url.pathname === '/acob/servlet/BuscaAcordo', { waitUntil: 'domcontentloaded', timeout: 25000 });
             await Promise.all([resultado, form.getByRole('button', { name: 'Buscar', exact: true }).click()]);
-            const pagina = await consulta.locator('body').evaluate((body, numero) => ({
+            await consulta.waitForLoadState('load', { timeout: 12000 }).catch(() => {});
+            const paginas = await Promise.all(consulta.frames().filter(f => f.url().startsWith(origem+'/acob/')).map(frame => frame.locator('body').evaluate((body, numero) => ({
+              caminho: location.pathname,
+              texto: body.innerText.trim().slice(0,1100),
+              temScript: Boolean(body.querySelector('script')),
+              temFrames: Boolean(document.querySelector('iframe,frame')),
+
               resumo: body.innerText.split('\n').map(t => t.trim()).filter(t =>
                 /nenhum|n[aã]o (?:foi|encontr)|sem (?:acord|perm)|ocorr[eê]ncia|erro|detalhe|selecion/i.test(t)).slice(0,20),
               tabelas: [...body.querySelectorAll('table')].filter(t => !t.querySelector('table'))
@@ -168,8 +178,8 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
                 temAcao: Boolean(e.getAttribute('onclick')),
                 associado: Boolean(e.closest('tr')?.innerText.includes(numero)),
               })).filter(e => e.associado || /demonstr|mem[oó]ria|detalhe|modelo|termo|planilha/i.test(e.texto)),
-            }), numero);
-            consultas.push({ numero, ...pagina });
+            }), numero).catch(() => null)));
+            consultas.push({ numero, empresa, paginas });
           } catch { consultas.push({ numero, erro: 'Busca específica indisponível' }); }
           finally { await consulta.close(); }
         }
