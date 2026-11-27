@@ -63,7 +63,7 @@ async function consulta(page, abrir) {
   const linhas = paginas.flat().filter(r => ids.has(r.linha[0] + '/' + r.linha[1] + ':' + r.linha[2]))
     .map(r => ({ unidade: r.linha[0] + '/' + r.linha[1], numero: r.linha[2], principalExibido: r.linha[4], controles: r.controles }))
   capturas.push({ durante, ativos, linhas, situacoes: acordos.map(({unidade,numero,saldo,recebido,total})=>({unidade,numero,saldo,recebido,total})), pagina: new URL(page.url()).pathname })
-  const resultado = { vinculos: [], falhas: 0, unidades: 0 }
+  const resultado = { vinculos: [], falhas: 0, unidades: 0, motivos: {} }
   capturas.push(resultado)
   await page.goto(new URL('/bin/aplic/u_2via.asp', page.url()).href, { waitUntil: 'domcontentloaded' })
   const prazo = Date.now() + 22000
@@ -92,7 +92,8 @@ async function consulta(page, abrir) {
       const lista=await frame.evaluate(async ref => {
         const r=await fetch('/relatorioboleto/recibos?unidade='+encodeURIComponent(ref))
         if(!r.ok) throw Error('Recibos indisponíveis')
-        const d=await r.json()
+        const resposta=await r.json()
+        const d=resposta.dados ?? resposta
         if(d.success!==true || d.unidade!==ref || !Array.isArray(d.Recibo)) throw Error('Lista divergente')
         return d.Recibo.filter(x=>x.ReciboDeAcordo===true).map(x=>({
           numero:x.numero, unidade:x.recibo_unidade, origem:x.Origem, parcela:x.parcela, vencimento:x.vencimento, valor:x.valor,
@@ -111,7 +112,11 @@ async function consulta(page, abrir) {
           boletos.filter(x=>x.recibo===candidatos[0].recibo).length!==1) continue
         resultado.vinculos.push({unidade,numero:a.numero,parcela:p.numero,vencimento:p.vencimento,valor:p.valor,recibo:candidatos[0].recibo})
       }
-    } catch { resultado.falhas++ }
+    } catch(error) {
+      resultado.falhas++
+      const motivo=['Unidade divergente','Recibos indisponíveis','Lista divergente'].includes(error.message) ? error.message : 'Outro erro'
+      resultado.motivos[motivo]=(resultado.motivos[motivo]??0)+1
+    }
     await page.waitForTimeout(350)
   }
   console.log('Recibos com vínculo único:',resultado.vinculos.length,'Unidades consultadas:',resultado.unidades)
