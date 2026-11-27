@@ -117,6 +117,6 @@ export async function coletarAcordosWebware(portal, acesso) {
         [...tabela.querySelectorAll('tr')].map(linha => [...linha.cells].map(celula => celula.innerText.trim())))
       paginas.push({ numero, linhas })
     }
-    return lerAcordosWebware(paginas, { incluirDetalhes: portal === 'atipass' })
+    return lerAcordosWebware(paginas, { incluirDetalhes: ['atipass', 'villagua'].includes(portal) })
   })
 }

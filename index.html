@@ -1189,7 +1189,7 @@
               ...dados.unidades, ...dados.cotas.map(cota => cota.unidade),
               ...dados.acordos.map(acordo => acordo.unidade), ...dados.contatos.map(contato => contato.unidade),
               ...(dados.conferenciaManager?.fichas ?? []).map(ficha => ficha.unidade),
-              ...(dados.conferenciaAtipass?.ausentes ?? []).map(acordo => acordo.unidade),
+              ...((dados.conferenciaVillagua ?? dados.conferenciaAtipass)?.ausentes ?? []).map(acordo => acordo.unidade),
             ].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
             opcoesConsulta(unidade.corpo, [["todas", "Todas as unidades"], ...unidadeIds.map(id => ["unidade:" + id, id])]);
             unidade.corpo.value = "todas";
@@ -1233,6 +1233,7 @@
         c.acordoOrigem ? "Acordo " + c.acordoOrigem : null, situacoesAcordos.get(c.acordoOrigem),
       ].filter(Boolean).join(" · ")));
       const conferencia = dados.conferenciaManager;
+      const conferenciaWebware = dados.conferenciaVillagua ?? dados.conferenciaAtipass;
       if (!dados.cobertura || dados.acordosCaptadosEm) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => {
         const linha = [
           a.unidade, "Acordo " + a.numero, a.situacao,
@@ -1244,12 +1245,12 @@
           a.cotasAbertasNoPeriodo?.length ? "Recibos em aberto no período (a conferir) " + a.cotasAbertasNoPeriodo.map(cota => cota.recibo).join(", ") : null,
         ].filter(Boolean).join(" · ");
         const recibos = (a.parcelas ?? []).filter(parcela => parcela.recibo);
-        const detalheAtipass = dados.conferenciaAtipass?.aplicada || Object.hasOwn(a, "percentualQuitadoPortal");
-        if (!a.composicaoFinanceira && !recibos.length && !detalheAtipass) return linha;
+        const detalheWebware = conferenciaWebware?.aplicada || Object.hasOwn(a, "percentualQuitadoPortal");
+        if (!a.composicaoFinanceira && !recibos.length && !detalheWebware) return linha;
         const acordo = document.createDocumentFragment();
         acordo.append(linha);
         if (a.composicaoFinanceira) acordo.append(mostrarComposicaoFinanceira(a.composicaoFinanceira));
-        if (detalheAtipass) acordo.append(mostrarFichaAcordo(a, "Detalhamento da grade"));
+        if (detalheWebware) acordo.append(mostrarFichaAcordo(a, "Detalhamento da grade"));
         if (recibos.length) listar(acordo, "Recibos das parcelas", recibos.map(parcela =>
           ["Parcela " + parcela.numero, "Recibo " + parcela.recibo, dataCurta(parcela.vencimento),
             moeda.format(parcela.valor / 100)].join(" · ")
@@ -1263,10 +1264,11 @@
         const ausentes = fichas.filter(f => f.resultado === "ausente");
         if (ausentes.length) listar(listas, "Histórico da conferência · " + dataConsulta, ausentes.map(mostrarFichaManager));
       }
-      if (dados.conferenciaAtipass) {
-        const { ausentes, conferidoEm } = dados.conferenciaAtipass;
+      if (conferenciaWebware) {
+        const { ausentes, conferidoEm } = conferenciaWebware;
         const historico = ausentes.filter(a => corresponde(a.unidade));
-        if (historico.length) listar(listas, "Histórico Atipass · " + dataHora.format(new Date(conferidoEm)),
+        const administradora = dados.conferenciaVillagua ? "Villágua" : "Atipass";
+        if (historico.length) listar(listas, "Histórico " + administradora + " · " + dataHora.format(new Date(conferidoEm)),
           historico.map(a => mostrarFichaAcordo(a,
             [a.unidade, "Acordo " + a.numero, "Ausente na grade", a.situacao].filter(Boolean).join(" · ")
           ))
