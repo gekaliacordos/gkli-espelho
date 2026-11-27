@@ -105,7 +105,8 @@ export async function coletarManager(credenciais, visitar, { codigos, somenteAco
             return {
               unidade: a.bloco + '/' + a.unidade, numero: a.processo, principal: a.valor_principal_centavos,
               total: a.total.valor_centavos, recebido: a.total.recebido_centavos, saldo: a.total.saldo_centavos,
-              situacao: a.total.saldo_centavos > 0 ? 'Com saldo em aberto' : 'Saldo zerado',
+              situacao: a.total.saldo_centavos > 0 ? 'Com saldo em aberto'
+                  : a.total.saldo_centavos < 0 ? 'Saldo credor' : 'Saldo zerado',
               periodoNegociado: periodo.length === 2 ? { inicio: dataIso(periodo[0]), fim: dataIso(periodo[1]) } : null,
               parcelas: a.parcelas.map(p => ({
                 numero: p.parcela, vencimento: dataIso(p.vencimento), valor: p.valor_centavos,
