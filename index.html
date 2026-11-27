@@ -1189,13 +1189,15 @@
               ...dados.unidades, ...dados.cotas.map(cota => cota.unidade),
               ...dados.acordos.map(acordo => acordo.unidade), ...dados.contatos.map(contato => contato.unidade),
               ...(dados.conferenciaManager?.fichas ?? []).map(ficha => ficha.unidade),
-              ...((dados.conferenciaVillagua ?? dados.conferenciaAtipass)?.ausentes ?? []).map(acordo => acordo.unidade),
+              ...((dados.conferenciaVerti ?? dados.conferenciaVillagua ?? dados.conferenciaAtipass)?.ausentes ?? []).map(acordo => acordo.unidade),
             ].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
             opcoesConsulta(unidade.corpo, [["todas", "Todas as unidades"], ...unidadeIds.map(id => ["unidade:" + id, id])]);
             unidade.corpo.value = "todas";
             const resumo = document.createElement("p");
             resumo.textContent = [
-              "Captado em " + dataHora.format(new Date(captacao.captado_em)),
+              dados.cotasCaptadasEm
+                ? "Cotas captadas em " + dataHora.format(new Date(dados.cotasCaptadasEm))
+                : "Captado em " + dataHora.format(new Date(captacao.captado_em)),
               dados.acordosCaptadosEm ? "Acordos captados em " + dataHora.format(new Date(dados.acordosCaptadosEm)) : null,
             ].filter(Boolean).join(" · ");
             status.replaceChildren(resumo);
@@ -1233,25 +1235,26 @@
         c.acordoOrigem ? "Acordo " + c.acordoOrigem : null, situacoesAcordos.get(c.acordoOrigem),
       ].filter(Boolean).join(" · ")));
       const conferencia = dados.conferenciaManager;
-      const conferenciaWebware = dados.conferenciaVillagua ?? dados.conferenciaAtipass;
+      const conferenciaGrade = dados.conferenciaVerti ?? dados.conferenciaVillagua ?? dados.conferenciaAtipass;
       if (!dados.cobertura || dados.acordosCaptadosEm) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => {
         const linha = [
           a.unidade, "Acordo " + a.numero, a.situacao,
           a.total == null ? null : moeda.format(a.total / 100),
           a.parcelas ? a.parcelas.length + " parcelas" : null, a.cotas ? a.cotas.length + " cotas vinculadas" : null,
           a.saldo == null ? null : (a.situacaoNaCaptacao ? "Saldo na captação " : "Saldo ") + moeda.format(a.saldo / 100),
+          a.parcelasIncompletas ? "Parcelas parciais no relatório" : null,
           Number.isSafeInteger(a.honorariosCobranca) ? "Honorários de cobrança " + moeda.format(a.honorariosCobranca / 100) : null,
           a.periodoNegociado ? "Período negociado " + dataCurta(a.periodoNegociado.inicio) + " a " + dataCurta(a.periodoNegociado.fim) : null,
           a.cotasAbertasNoPeriodo?.length ? "Recibos em aberto no período (a conferir) " + a.cotasAbertasNoPeriodo.map(cota => cota.recibo).join(", ") : null,
         ].filter(Boolean).join(" · ");
         const recibos = (a.parcelas ?? []).filter(parcela => parcela.recibo);
-        const detalheWebware = conferenciaWebware?.aplicada || Object.hasOwn(a, "percentualQuitadoPortal");
-        if (!a.composicaoFinanceira && !recibos.length && !detalheWebware) return linha;
+        const detalheGrade = conferenciaGrade?.aplicada || Object.hasOwn(a, "percentualQuitadoPortal");
+        if (!a.composicaoFinanceira && !recibos.length && !detalheGrade) return linha;
         const acordo = document.createDocumentFragment();
         acordo.append(linha);
         if (a.composicaoFinanceira) acordo.append(mostrarComposicaoFinanceira(a.composicaoFinanceira));
-        if (detalheWebware) acordo.append(mostrarFichaAcordo(a, "Detalhamento da grade"));
-        if (recibos.length) listar(acordo, "Recibos das parcelas", recibos.map(parcela =>
+        if (detalheGrade) acordo.append(mostrarFichaAcordo(a, "Detalhamento da grade"));
+        if (recibos.length && !detalheGrade) listar(acordo, "Recibos das parcelas", recibos.map(parcela =>
           ["Parcela " + parcela.numero, "Recibo " + parcela.recibo, dataCurta(parcela.vencimento),
             moeda.format(parcela.valor / 100)].join(" · ")
         ));
@@ -1264,10 +1267,10 @@
         const ausentes = fichas.filter(f => f.resultado === "ausente");
         if (ausentes.length) listar(listas, "Histórico da conferência · " + dataConsulta, ausentes.map(mostrarFichaManager));
       }
-      if (conferenciaWebware) {
-        const { ausentes, conferidoEm } = conferenciaWebware;
+      if (conferenciaGrade) {
+        const { ausentes, conferidoEm } = conferenciaGrade;
         const historico = ausentes.filter(a => corresponde(a.unidade));
-        const administradora = dados.conferenciaVillagua ? "Villágua" : "Atipass";
+        const administradora = dados.conferenciaVerti ? "Verti" : dados.conferenciaVillagua ? "Villágua" : "Atipass";
         if (historico.length) listar(listas, "Histórico " + administradora + " · " + dataHora.format(new Date(conferidoEm)),
           historico.map(a => mostrarFichaAcordo(a,
             [a.unidade, "Acordo " + a.numero, "Ausente na grade", a.situacao].filter(Boolean).join(" · ")
@@ -1302,7 +1305,9 @@
       const valores = document.createElement("dl");
       valores.className = "catalog-record";
       for (const [chave, rotuloCampo] of [
-        ["principal", "Principal"], ["total", "Valor do acordo"], ["recebido", "Recebido"], ["saldo", "Saldo"],
+        ["principal", "Principal"],
+        ["total", acordo.parcelasIncompletas ? "Total das parcelas exibidas" : "Valor do acordo"],
+        ["recebido", "Recebido"], ["saldo", acordo.parcelasIncompletas ? "Saldo das parcelas exibidas" : "Saldo"],
       ]) {
         const termo = document.createElement("dt");
         termo.textContent = rotuloCampo;
@@ -1319,8 +1324,10 @@
       }
       detalhes.append(valores);
       if (acordo.parcelas?.length) listar(detalhes, "Parcelas da consulta", acordo.parcelas.map(p => [
-        "Parcela " + p.numero, "Vencimento " + dataCurta(p.vencimento), moeda.format(p.valor / 100),
+        "Parcela " + p.numero, p.recibo ? "Recibo " + p.recibo : null,
+        "Vencimento " + dataCurta(p.vencimento), moeda.format(p.valor / 100),
         p.pagamento ? "Recebimento " + dataCurta(p.pagamento) : null,
+        p.baixaRecibo ? "Baixa de recibo" : null,
         Number.isSafeInteger(p.recebido) ? "Recebido " + moeda.format(p.recebido / 100) : null,
       ].filter(Boolean).join(" · ")));
     }
