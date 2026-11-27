@@ -436,7 +436,7 @@
     }
 
     function consultarCaptacao(token, id) {
-      return consultarEspelho(token, "captacoes_com_acordos", {
+      return consultarEspelho(token, "captacoes_com_conferencias", {
         select: "condominio,administradora,captado_em,dados",
         id: "eq." + id,
         limit: "1",
@@ -1188,6 +1188,7 @@
             const unidadeIds = [...new Set([
               ...dados.unidades, ...dados.cotas.map(cota => cota.unidade),
               ...dados.acordos.map(acordo => acordo.unidade), ...dados.contatos.map(contato => contato.unidade),
+              ...(dados.conferenciaManager?.fichas ?? []).map(ficha => ficha.unidade),
             ].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
             opcoesConsulta(unidade.corpo, [["todas", "Todas as unidades"], ...unidadeIds.map(id => ["unidade:" + id, id])]);
             unidade.corpo.value = "todas";
@@ -1230,9 +1231,14 @@
         c.unidade, "Recibo " + c.recibo, c.vencimento, moeda.format(c.valores.at(-1) / 100),
         c.acordoOrigem ? "Acordo " + c.acordoOrigem : null, situacoesAcordos.get(c.acordoOrigem),
       ].filter(Boolean).join(" · ")));
+      const conferencia = dados.conferenciaManager;
+      const ausentes = new Set(conferencia?.aplicada ? conferencia.fichas.filter(f => f.resultado === "ausente")
+        .map(f => JSON.stringify([f.unidade, f.numero])) : []);
       if (!dados.cobertura || dados.acordosCaptadosEm) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => {
         const linha = [
-          a.unidade, "Acordo " + a.numero, a.situacao, a.total == null ? null : moeda.format(a.total / 100),
+          a.unidade, "Acordo " + a.numero, a.situacao,
+          ausentes.has(JSON.stringify([a.unidade, String(a.numero)])) ? "Situação a confirmar no Atentum" : null,
+          a.total == null ? null : moeda.format(a.total / 100),
           a.parcelas ? a.parcelas.length + " parcelas" : null, a.cotas ? a.cotas.length + " cotas vinculadas" : null,
           a.saldo == null ? null : (a.situacaoNaCaptacao ? "Saldo na captação " : "Saldo ") + moeda.format(a.saldo / 100),
           a.periodoNegociado ? "Período negociado " + dataCurta(a.periodoNegociado.inicio) + " a " + dataCurta(a.periodoNegociado.fim) : null,
@@ -1249,6 +1255,39 @@
         ));
         return acordo;
       }));
+      if (conferencia) {
+        const dataConsulta = dataHora.format(new Date(conferencia.conferidoEm));
+        listar(listas, "Conferência no Atentum · " + dataConsulta,
+          conferencia.fichas.filter(f => corresponde(f.unidade)).map(mostrarFichaManager));
+      }
+    }
+
+    function mostrarFichaManager(ficha) {
+      const rotulo = ficha.unidade + " · Acordo " + ficha.numero;
+      const acordo = ficha.acordo;
+      if (!acordo) return rotulo + " · Ausente na grade em aberto · Situação a confirmar";
+
+      const detalhes = document.createElement("details");
+      const titulo = document.createElement("summary");
+      titulo.textContent = rotulo + " · " + acordo.situacao;
+      const valores = document.createElement("dl");
+      valores.className = "catalog-record";
+      for (const [chave, rotuloCampo] of [
+        ["principal", "Principal"], ["total", "Valor do acordo"], ["recebido", "Recebido"], ["saldo", "Saldo"],
+      ]) {
+        const termo = document.createElement("dt");
+        termo.textContent = rotuloCampo;
+        const valor = document.createElement("dd");
+        valor.textContent = Number.isSafeInteger(acordo[chave]) ? moeda.format(acordo[chave] / 100) : "Não informado";
+        valores.append(termo, valor);
+      }
+      detalhes.append(titulo, valores);
+      listar(detalhes, "Parcelas da consulta", acordo.parcelas.map(p => [
+        "Parcela " + p.numero, "Vencimento " + dataCurta(p.vencimento), moeda.format(p.valor / 100),
+        p.pagamento ? "Recebimento " + dataCurta(p.pagamento) : null,
+        p.recebido ? "Recebido " + moeda.format(p.recebido / 100) : null,
+      ].filter(Boolean).join(" · ")));
+      return detalhes;
     }
 
     function mostrarComposicaoFinanceira(composicao) {
