@@ -36,6 +36,7 @@ for(const alvo of alvos){
     for(const a of abas.slice()){
      if(a.isClosed())continue
      for(const f of a.frames()){
+      if(!f.url().startsWith('https://sys.livefacilities.com.br/'))continue
       const u=new URL(f.url())
       if(u.origin!=='https://sys.livefacilities.com.br'||!/RelatorioAcordoDetalhado/i.test(u.pathname))continue
       rotas.add(u.pathname)
@@ -59,6 +60,6 @@ for(const alvo of alvos){
     await new Promise(r=>setTimeout(r,600))
    }
   })
- }catch{dados.incompleto=true}
+ }catch(e){dados.incompleto=true;dados.tipo=e.name}
  console.log('HFLEX_CAMPOS',JSON.stringify({codigo:alvo.codigoPortal,...dados}))
 }
