@@ -1238,6 +1238,7 @@
         const linha = [
           a.unidade, "Acordo " + a.numero, a.situacao,
           ausentes.has(JSON.stringify([a.unidade, String(a.numero)])) ? "Situação a confirmar no Atentum" : null,
+          a.situacaoHabitacionalPendente ? "Situação a confirmar na Habitacional" : null,
           a.total == null ? null : moeda.format(a.total / 100),
           a.parcelas ? a.parcelas.length + " parcelas" : null, a.cotas ? a.cotas.length + " cotas vinculadas" : null,
           a.saldo == null ? null : (a.situacaoNaCaptacao ? "Saldo na captação " : "Saldo ") + moeda.format(a.saldo / 100),
@@ -1295,7 +1296,7 @@
       const titulo = document.createElement("summary");
       titulo.textContent = "Composição financeira";
       const origem = document.createElement("p");
-      origem.textContent = [composicao.fonte, composicao.situacaoAcob,
+      origem.textContent = [composicao.fonte, composicao.situacaoAcob ?? composicao.situacaoOrigem,
         composicao.dataCriacao ? "Criado em " + dataCurta(composicao.dataCriacao) : null,
         "Conferido em " + dataHora.format(new Date(composicao.conferidoEm))].filter(Boolean).join(" · ");
       const valores = document.createElement("dl");
@@ -1303,10 +1304,11 @@
       const rubricas = [
         ["original", "Principal"], ["juros", "Juros"], ["multa", "Multa"],
         ["correcao", "Correção monetária"], ["honorarios", "Honorários"], ["custas", "Custas"],
-        ["despesas", "Despesas"], ["jurosParcelas", "Juros das parcelas"], ["desconto", "Desconto no Acob"],
+        ["despesas", "Despesas"], ["jurosParcelas", composicao.situacaoAcob ? "Juros das parcelas" : "Juros de parcelamento"], ["desconto", composicao.situacaoAcob ? "Desconto no Acob" : "Desconto"],
         ["total", "Total do acordo"], ["pago", "Parcelas pagas"],
       ];
       if (composicao.diferenca) rubricas.push(["diferenca", "Diferença de conciliação"]);
+      if (Number.isSafeInteger(composicao.valorAdministrativo)) rubricas.push(["valorAdministrativo", "Valor Administrativo"]);
       for (const [chave, rotulo] of rubricas) {
         const termo = document.createElement("dt");
         termo.textContent = rotulo;
@@ -1315,6 +1317,16 @@
         valores.append(termo, valor);
       }
       ficha.append(titulo, origem, valores);
+      if (composicao.lancamentos?.length) listar(ficha, "Outros lançamentos", composicao.lancamentos.map(l => [
+        l.descricao, moeda.format(l.valor / 100), "Pago " + moeda.format(l.pago / 100),
+      ].join(" · ")));
+      if (composicao.parcelas?.length) listar(ficha, "Parcelas do relatório", composicao.parcelas.map(p => [
+        "Parcela " + p.numero, "Vencimento " + dataCurta(p.vencimento), "Valor " + moeda.format(p.valor / 100),
+        "Atualização " + moeda.format(p.correcao / 100), "Juros " + moeda.format(p.juros / 100),
+        "Total " + moeda.format(p.total / 100), "Pago " + moeda.format(p.recebido / 100),
+        p.pagamento ? "Recebimento " + dataCurta(p.pagamento) : null,
+        "Valor Administrativo " + moeda.format(p.valorAdministrativo / 100),
+      ].filter(Boolean).join(" · ")));
       return ficha;
     }
 
