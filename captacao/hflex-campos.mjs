@@ -10,6 +10,8 @@ for(const alvo of alvos){
  const dados={}
  try {
   await baixarRelatoriosHflex(credenciais,{},alvo,()=>{},async page=>{
+   await page.locator('#body_tbNumeroAcordo').fill(alvo.numero)
+   await page.getByRole('checkbox',{name:'TODOS STATUS',exact:true}).check()
    dados.etapa='controles'
    const relatorios=await page.locator('input[type=submit],input[type=button],button,a').evaluateAll(els=>els.map(e=>({id:e.id,rotulo:e.value||e.innerText||e.title||''})).filter(e=>/relat[oó]rio.*(?:detalhado|sint[eé]tico)|repasse|honor[aá]rio/i.test(e.rotulo)&&e.rotulo.length<60))
    dados.controles=relatorios.map(e=>e.rotulo)
@@ -31,7 +33,7 @@ for(const alvo of alvos){
          .map(t=>[...t.rows].map(r=>[...r.cells].map(c=>c.innerText.trim())))
        return {txt,tabelas}
       }).catch(()=>null)
-      if(r&&/honor[aá]rios?/i.test(r.txt)&&/parcela/i.test(r.txt)){
+      if(r&&r.txt.includes('Nº ACORDO: '+alvo.numero)&&/DETALHE DO ACORDO|PARCELA/i.test(r.txt)){
        dados.relatorio=r
        return
       }
@@ -45,5 +47,5 @@ for(const alvo of alvos){
  const c=createCipheriv('aes-256-gcm',chave,iv)
  const conteudo=Buffer.concat([c.update(gzipSync(JSON.stringify({codigo:alvo.codigoPortal,...dados}))),c.final()])
  const envelope=Buffer.concat([publicEncrypt({key:Buffer.from(process.env.PUBLIC_RESULT_KEY,'base64'),padding:constants.RSA_PKCS1_OAEP_PADDING,oaepHash:'sha256'},chave),iv,c.getAuthTag(),conteudo]).toString('base64')
- for(let i=0;i<envelope.length;i+=1800)console.log('HF_'+alvo.codigoPortal+'_'+i/1800+'='+envelope.slice(i,i+1800))
+ for(let i=0;i<envelope.length;i+=1800)console.log('HF_'+alvo.numero+'_'+i/1800+'='+envelope.slice(i,i+1800))
 }
