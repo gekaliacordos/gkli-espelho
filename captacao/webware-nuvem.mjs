@@ -77,7 +77,7 @@ export async function lerGradeWebware(pagina) {
   return lerAcordosWebware(paginas)
 }
 
-export async function coletarWebwareNuvem(portal, credenciais, visitar) {
+export async function coletarWebwareNuvem(portal, credenciais, visitar, consultaPontual) {
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
   const pagina = await browser.newPage({ acceptDownloads: true })
   pagina.setDefaultTimeout(30_000)
@@ -92,8 +92,18 @@ export async function coletarWebwareNuvem(portal, credenciais, visitar) {
     const lista = pagina.url()
     if (new URL(lista).protocol !== 'https:' || !hosts.has(new URL(lista).hostname)) throw Error('Relação de condomínios fora da origem.')
     const alvos = portal === 'bbz' ? alvosBbZ : [[null, 'CAMINHOS DA LAPA JERIVAS']]
-    for (const [codigoEsperado, titulo] of alvos) {
-      await visitar(codigoEsperado ? portal + '-' + codigoEsperado : 'graiche-jerivas', titulo, async etapa => {
+    if (portal === 'bbz' && consultaPontual && process.argv[2] === 'bbz-1880') {
+      const extras = await pagina.locator('.card').evaluateAll(cards => cards.flatMap(card => {
+        const codigo = [...card.querySelectorAll('[onclick]')].some(el =>
+          /AcessarVinculo\(['"]1880['"]/.test(el.getAttribute('onclick') ?? ''))
+        const titulo = card.querySelector('.txt-titulo')?.innerText.trim()
+        return codigo && titulo ? [titulo] : []
+      }))
+      if (extras.length === 1 && /PARQUE.*CIP[OÓ]/i.test(extras[0])) {
+        await visitar('bbz-1880',extras[0],async etapa => entrarCondominio(1880, extras[0], etapa))
+      }
+    }
+    async function entrarCondominio(codigoEsperado, titulo, etapa) {
         if (pagina.url() !== lista) await pagina.goto(lista, { waitUntil: 'domcontentloaded' })
         const cartao = pagina.locator('.card').filter({ has: pagina.locator('.txt-titulo').getByText(titulo, { exact: true }) })
         await cartao.waitFor()
@@ -115,6 +125,7 @@ export async function coletarWebwareNuvem(portal, credenciais, visitar) {
             throw Error('Condomínio do resultado divergente.')
           }
         }
+        if (consultaPontual) return consultaPontual(pagina, () => abrir('/bin/rt/gAcordo.asp'))
         const cotas = await etapa('cotas', async () => {
           await abrir('/bin/rt/rtPendentes.asp')
           return lerCotasWebware(pagina, titulo)
@@ -124,7 +135,10 @@ export async function coletarWebwareNuvem(portal, credenciais, visitar) {
           return lerGradeWebware(pagina)
         })
         return { cotas, acordos }
-      })
+    }
+    for (const [codigoEsperado,titulo] of alvos) {
+      await visitar(codigoEsperado ? portal + '-' + codigoEsperado : 'graiche-jerivas',titulo,
+        etapa => entrarCondominio(codigoEsperado,titulo,etapa))
     }
   } finally {
     await browser.close()
