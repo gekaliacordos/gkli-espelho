@@ -328,7 +328,7 @@
         const lista = document.createElement("ul");
         for (const linha of linhas) {
           const item = document.createElement("li");
-          item.textContent = linha;
+          item.append(linha);
           lista.append(item);
         }
         detalhes.append(lista);
@@ -436,7 +436,7 @@
     }
 
     function consultarCaptacao(token, id) {
-      return consultarEspelho(token, "captacoes", {
+      return consultarEspelho(token, "captacoes_com_acordos", {
         select: "condominio,administradora,captado_em,dados",
         id: "eq." + id,
         limit: "1",
@@ -1230,13 +1230,47 @@
         c.unidade, "Recibo " + c.recibo, c.vencimento, moeda.format(c.valores.at(-1) / 100),
         c.acordoOrigem ? "Acordo " + c.acordoOrigem : null, situacoesAcordos.get(c.acordoOrigem),
       ].filter(Boolean).join(" · ")));
-      if (!dados.cobertura || dados.acordosCaptadosEm) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => [
-        a.unidade, "Acordo " + a.numero, a.situacao, a.total == null ? null : moeda.format(a.total / 100),
-        a.parcelas ? a.parcelas.length + " parcelas" : null, a.cotas ? a.cotas.length + " cotas vinculadas" : null,
-        a.saldo == null ? null : "Saldo " + moeda.format(a.saldo / 100),
-        a.periodoNegociado ? "Período negociado " + dataCurta(a.periodoNegociado.inicio) + " a " + dataCurta(a.periodoNegociado.fim) : null,
-        a.cotasAbertasNoPeriodo?.length ? "Recibos em aberto no período (a conferir) " + a.cotasAbertasNoPeriodo.map(cota => cota.recibo).join(", ") : null,
-      ].filter(Boolean).join(" · ")));
+      if (!dados.cobertura || dados.acordosCaptadosEm) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => {
+        const linha = [
+          a.unidade, "Acordo " + a.numero, a.situacao, a.total == null ? null : moeda.format(a.total / 100),
+          a.parcelas ? a.parcelas.length + " parcelas" : null, a.cotas ? a.cotas.length + " cotas vinculadas" : null,
+          a.saldo == null ? null : (a.situacaoNaCaptacao ? "Saldo na captação " : "Saldo ") + moeda.format(a.saldo / 100),
+          a.periodoNegociado ? "Período negociado " + dataCurta(a.periodoNegociado.inicio) + " a " + dataCurta(a.periodoNegociado.fim) : null,
+          a.cotasAbertasNoPeriodo?.length ? "Recibos em aberto no período (a conferir) " + a.cotasAbertasNoPeriodo.map(cota => cota.recibo).join(", ") : null,
+        ].filter(Boolean).join(" · ");
+        if (!a.composicaoFinanceira) return linha;
+        const acordo = document.createDocumentFragment();
+        acordo.append(linha, mostrarComposicaoFinanceira(a.composicaoFinanceira));
+        return acordo;
+      }));
+    }
+
+    function mostrarComposicaoFinanceira(composicao) {
+      const ficha = document.createElement("details");
+      const titulo = document.createElement("summary");
+      titulo.textContent = "Composição financeira";
+      const origem = document.createElement("p");
+      origem.textContent = [composicao.fonte, composicao.situacaoAcob,
+        composicao.dataCriacao ? "Criado em " + dataCurta(composicao.dataCriacao) : null,
+        "Conferido em " + dataHora.format(new Date(composicao.conferidoEm))].filter(Boolean).join(" · ");
+      const valores = document.createElement("dl");
+      valores.className = "catalog-record";
+      const rubricas = [
+        ["original", "Principal"], ["juros", "Juros"], ["multa", "Multa"],
+        ["correcao", "Correção monetária"], ["honorarios", "Honorários"], ["custas", "Custas"],
+        ["despesas", "Despesas"], ["jurosParcelas", "Juros das parcelas"], ["desconto", "Desconto no Acob"],
+        ["total", "Total do acordo"], ["pago", "Parcelas pagas"],
+      ];
+      if (composicao.diferenca) rubricas.push(["diferenca", "Diferença de conciliação"]);
+      for (const [chave, rotulo] of rubricas) {
+        const termo = document.createElement("dt");
+        termo.textContent = rotulo;
+        const valor = document.createElement("dd");
+        valor.textContent = Number.isSafeInteger(composicao[chave]) ? moeda.format(composicao[chave] / 100) : "Não discriminado";
+        valores.append(termo, valor);
+      }
+      ficha.append(titulo, origem, valores);
+      return ficha;
     }
 
     function tabelaRanking(rotulos, linhas) {
