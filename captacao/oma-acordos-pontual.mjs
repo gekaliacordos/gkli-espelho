@@ -9,6 +9,7 @@ try {
   dados.fase='vinculos'
   const links=await pagina.locator('a[href*="changeCondominioPadrao/id/"]').evaluateAll(es=>es.map(e=>({nome:e.innerText.trim(),rota:e.pathname,origem:e.origin})))
   dados.totalVinculos=new Set(links.map(x=>x.rota)).size
+  dados.vinculosAtmosfera=links.some(x=>norm(x.nome).includes('ATMOSFERA'))
   dados.condominios=[]
   for(const alvo of ['VISO MOEMA','ATMOSFERA RESIDENCIAL','ATMOSFERA STUDIOS']){
    const info={alvo}
@@ -26,7 +27,9 @@ try {
     const financeiro=pagina.frameLocator('iframe[src*="appweb.winker.com.br"]').first()
     const relat=financeiro.getByText('Relatórios',{exact:true}).first()
     await relat.click({timeout:30000})
-    info.relatorios=await procurar(financeiro)
+    await financeiro.getByText('Inadimplentes',{exact:true}).first().waitFor({state:'visible',timeout:10000}).catch(()=>{})
+    const texto=await financeiro.locator('body').innerText({timeout:5000})
+    info.relatorios=[...new Set(texto.split('\n').map(t=>t.trim()).filter(t=>/acord|negocia|repasse|honor|inadimpl|balancete|relat[óo]rio|cobran/i.test(t)&&t.length<55&&!/\d{5,}|@/.test(t)))]
     const candidatos=info.relatorios.filter(x=>/acordo|honor|repasse/i.test(x))
     if(candidatos.length===1){
       const atual=pagina.context().pages()
