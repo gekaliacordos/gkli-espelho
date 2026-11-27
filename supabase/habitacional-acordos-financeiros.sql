@@ -39,11 +39,11 @@ create or replace function espelho_privado.aplicar_conferencia_habitacional(
       when f.composicao is not null then
         (case when $2 <= f.conferido_em then f.acordo else '{}'::jsonb end)
         || jsonb_build_object('composicaoFinanceira', f.composicao || jsonb_build_object('conferidoEm', f.conferido_em))
-      when f.conferido_em is not null and $2 <= f.conferido_em then
-        jsonb_build_object('situacaoHabitacionalPendente', true)
       else '{}'::jsonb end as acordo, b.ordem
     from base b
     left join conferencias f on f.unidade = b.acordo->>'unidade' and f.numero = b.acordo->>'numero'
+    -- Uma captação mais recente pode voltar a listar o acordo.
+    where f.conferido_em is null or f.acordo is not null or $2 > f.conferido_em
     union all
     select f.acordo || jsonb_build_object('composicaoFinanceira', f.composicao || jsonb_build_object('conferidoEm', f.conferido_em)),
       null::bigint

@@ -1238,7 +1238,6 @@
         const linha = [
           a.unidade, "Acordo " + a.numero, a.situacao,
           ausentes.has(JSON.stringify([a.unidade, String(a.numero)])) ? "Situação a confirmar no Atentum" : null,
-          a.situacaoHabitacionalPendente ? "Situação a confirmar na Habitacional" : null,
           a.total == null ? null : moeda.format(a.total / 100),
           a.parcelas ? a.parcelas.length + " parcelas" : null, a.cotas ? a.cotas.length + " cotas vinculadas" : null,
           a.saldo == null ? null : (a.situacaoNaCaptacao ? "Saldo na captação " : "Saldo ") + moeda.format(a.saldo / 100),
