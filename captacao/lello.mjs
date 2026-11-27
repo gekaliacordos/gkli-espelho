@@ -63,7 +63,7 @@ export async function coletarEtapaLello(etapas, etapa, urls, dependencia, progre
   return itens
 }
 
-export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario, senha }, signal, progresso = () => {}, etapas) {
+export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario, senha }, signal, progresso = () => {}, etapas, consultaPontual) {
   if (!/^\d+$/.test(codigo) || !nome || !usuario || !senha) throw Error('Acesso ou alvo da Lello incompleto.')
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
   const fechar = () => { void browser.close().catch(() => {}) }
@@ -95,6 +95,8 @@ export async function coletarEspelhoLello({ codigo, nome, busca = nome, usuario,
     const cabecalho = await botao.innerText()
     if (!padrao.test(cabecalho) || !normalizar(cabecalho).includes(normalizar(busca))) throw Error('Condomínio do portal diverge do cadastro.')
     await context.route('**/*', route => ['image', 'font', 'media'].includes(route.request().resourceType()) ? route.abort() : route.continue())
+
+    if (consultaPontual) return await consultaPontual(pagina, context)
 
     async function menu(pathname) {
       await pagina.locator(`a[href="${pathname}"]`).first().evaluate(a => a.click())
