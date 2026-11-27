@@ -1,7 +1,7 @@
 import { baixarRelatoriosHflex } from './hflex.mjs'
 import { execFileSync } from 'node:child_process'
 const alvos = JSON.parse(process.env.ALVOS_HFLEX)
-const campos = ['repasse','honorarios','taxa administrativa','comissao','principal','recibo','parcela','vencimento','pagamento','recebido','liquidacao','desconto','juros','multa','correcao','custas','despesas','credito','baixa']
+const campos = ['repasse','honorario','taxa administrativa','comissao','principal','recibo','parcela','vencimento','pagamento','recebido','liquidacao','desconto','juros','multa','correcao','custas','despesas','credito','baixa']
 const norm = s=>s.normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase()
 const presentes=t=>campos.filter(c=>new RegExp('\\b'+c+'s?\\b').test(norm(t)))
 const credenciais={usuario:process.env.ESPELHO_PORTAL_USUARIO,senha:process.env.ESPELHO_PORTAL_SENHA}
@@ -9,31 +9,54 @@ for(const alvo of alvos){
  const dados={}
  try {
   await baixarRelatoriosHflex(credenciais,{},alvo,()=>{},async page=>{
-   dados.menu=await page.locator('a').evaluateAll(els=>['repasse','honor','financeir','prestacao de contas'].filter(k=>els.some(el=>el.innerText.normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().includes(k))))
-   await page.getByRole('button',{name:'Pesquisar',exact:true}).click()
-   await page.locator('#tblListaBoletoFooter').waitFor({state:'visible'})
-   dados.grade=presentes(await page.locator('table:has(#tblListaBoletoFooter), #tblListaBoletoFooter').first().innerText())
-   const espera=page.waitForEvent('popup',{timeout:120000})
-   espera.catch(()=>{})
-   await page.getByRole('button',{name:'Relatório Detalhado',exact:true}).click()
-   const popup=await espera
-   await popup.waitForLoadState('domcontentloaded')
-   const url=new URL(popup.url())
-   if(url.origin!=='https://sys.livefacilities.com.br'||url.pathname!=='/Operacional/Relatorio/RelatorioAcordoDetalhado.aspx'||!url.searchParams.get('p'))throw Error('Relatório divergente')
-   dados.detalhado=[]
-   for(let i=0;i<24;i++){
-    const textos=await Promise.all(popup.frames().map(f=>f.locator('body').innerText({timeout:2000}).catch(()=>'')))
-    dados.detalhado=presentes(textos.join(' '))
-    if(dados.detalhado.includes('recibo')&&dados.detalhado.includes('parcela'))break
-    await new Promise(r=>setTimeout(r,2000))
-   }
-   const botao=popup.locator('[title*="PDF" i]:visible, a[href$=".pdf" i]:visible').first()
-   if(await botao.count()){
-    const download=popup.waitForEvent('download',{timeout:90000});download.catch(()=>{})
-    await botao.click()
-    const arquivo=await (await download).path()
-    const leitura=execFileSync('pdftotext',['-layout',arquivo,'-'],{encoding:'utf8'})
-    if(leitura.trim()) dados.pdf=presentes(leitura)
+   dados.etapa='controles'
+   const relatorios=await page.locator('input[type=submit],input[type=button],button,a').evaluateAll(els=>els.map(e=>({id:e.id,rotulo:e.value||e.innerText||e.title||''})).filter(e=>/relat[oó]rio.*(?:detalhado|sint[eé]tico)|repasse|honor[aá]rio/i.test(e.rotulo)&&e.rotulo.length<60))
+   dados.controles=relatorios.map(e=>e.rotulo)
+   dados.menu=await page.locator('a').evaluateAll(els=>els.map(e=>e.innerText.trim()).filter(t=>/repasse|honor|financeir|prestaç[aã]o de contas/i.test(t)&&t.length<65))
+   const detalhado=relatorios.find(x=>/relat[oó]rio detalhado/i.test(x.rotulo)&&x.id)
+   if(!detalhado)return
+   const context=page.context(), downloads=[], abas=[page]
+   const observar=p=>{abas.push(p);p.on('download',d=>downloads.push(d))}
+   page.on('download',d=>downloads.push(d))
+   context.on('page',observar)
+   dados.etapa='acionar'
+   await page.locator('[id="'+detalhado.id+'"]').click({timeout:10000})
+   dados.etapa='aguardar'
+   const prazo=Date.now()+95000
+   const rotas=new Set()
+   let acionado=false
+   while(Date.now()<prazo){
+    for(const d of downloads.splice(0)){
+     const x=await d.path()
+     try {
+      const leitura=execFileSync('pdftotext',['-layout',x,'-'],{encoding:'utf8',stdio:['ignore','pipe','ignore']})
+      if(leitura.trim()&&/acordo/i.test(leitura)){dados.pdf=presentes(leitura);dados.etapa='pdf';return}
+     } catch {}
+    }
+    for(const a of abas.slice()){
+     if(a.isClosed())continue
+     for(const f of a.frames()){
+      const u=new URL(f.url())
+      if(u.origin!=='https://sys.livefacilities.com.br'||!/RelatorioAcordoDetalhado/i.test(u.pathname))continue
+      rotas.add(u.pathname)
+      dados.rotas=[...rotas]
+      const t=await f.locator('body').innerText({timeout:2500}).catch(()=>'')
+      const d=presentes(t)
+      if(d.length>(dados.detalhado?.length??0))dados.detalhado=d
+      const pdf=f.locator('#btRelatorioPDF,#btRelatorioPdf,[title*="PDF" i]:visible').first()
+      if(!acionado&&await pdf.isVisible()){
+       acionado=true
+       if(f===a.mainFrame())await pdf.click({timeout:5000})
+       else {
+        const nova=await context.newPage()
+        await nova.goto(u.href,{waitUntil:'domcontentloaded'})
+        await nova.locator('#btRelatorioPDF,#btRelatorioPdf,[title*="PDF" i]:visible').first().click({timeout:12000})
+       }
+      }
+      if(d.includes('recibo')&&d.includes('parcela')&&!acionado){dados.etapa='texto';return}
+     }
+    }
+    await new Promise(r=>setTimeout(r,600))
    }
   })
  }catch{dados.incompleto=true}

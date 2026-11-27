@@ -22,4 +22,4 @@ jobs:
         env:
           ESPELHO_PORTAL_USUARIO: ${{ secrets.AGENTE_HFLEX_USUARIO }}
           ESPELHO_PORTAL_SENHA: ${{ secrets.AGENTE_HFLEX_SENHA }}
-          ALVOS_HFLEX: '[{"codigoPortal":"0290","nomePortal":"COND. ESCRITORIOS RIO NEGRO","bloco":"RIO NEGRO"},{"codigoPortal":"5987","nomePortal":"SUBCONDOMINIO EDIFICIO OFFICE TAMBORE","bloco":"OFFICE"}]'
+          ALVOS_HFLEX: '[{"codigoPortal":"0290","nomePortal":"COND. ESCRITORIOS RIO NEGRO","bloco":"RIO NEGRO"}]'
