@@ -21,7 +21,7 @@ async function encontrarFrame(pagina, condicao) {
   throw Error('Tela esperada da Manager não apareceu.')
 }
 
-export async function coletarManager(credenciais, visitar) {
+export async function coletarManager(credenciais, visitar, { codigos, somenteAcordos = false } = {}) {
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
   const pagina = await browser.newPage({ acceptDownloads: true })
   pagina.setDefaultTimeout(30_000)
@@ -31,8 +31,10 @@ export async function coletarManager(credenciais, visitar) {
     await pagina.locator('input[type=text]:visible').first().fill(credenciais.usuario)
     await pagina.locator('input[type=password]:visible').first().fill(credenciais.senha)
     await pagina.getByRole('button', { name: /^Entrar$/i }).click()
-    await pagina.waitForURL(url => url.origin === origem)
+    if (somenteAcordos) await encontrarFrame(pagina, f => f.locator('input[name=c]').first().isVisible())
+    else await pagina.waitForURL(url => url.origin === origem)
     for (const alvo of alvosManager) {
+      if (codigos && !codigos.has(alvo.codigo)) continue
       await visitar('manager-' + alvo.codigo, alvo.nome, async etapa => {
         const cliente = await encontrarFrame(pagina, f => f.locator('input[name=c]').first().isVisible())
         await cliente.locator('input[name=c]').first().fill(alvo.codigo)
@@ -41,13 +43,14 @@ export async function coletarManager(credenciais, visitar) {
           if (!await f.locator('select[name=Conteudo]').isVisible()) return false
           return codigo((await f.locator('body').innerText()).match(/Ocorrências\s*\|\s*Usuários\s*\|\s*(\d+)\s*-/i)?.[1]) === alvo.codigo
         })
-        const cotas = await etapa('cotas', async () => {
+        const cotas = somenteAcordos ? undefined : await etapa('cotas', async () => {
           const frame = pagina.frame({ name: 'conteudo' })
           await frame.goto(origem + '/bin/rt/rtPendentes.asp?u=', { waitUntil: 'domcontentloaded' })
           await filtrarWebware(frame)
           const titulo = await frame.getByText(new RegExp('Condom[ií]nio:\\s*0*' + alvo.codigo + '\\s*-', 'i')).first().innerText()
           return lerCotasWebware(frame, titulo.replace(/^.*?Condom[ií]nio:\s*\d+\s*-\s*/i, '').trim())
         })
+        let filtro;
         const acordos = await etapa('acordos', async () => {
           const mudou = pagina.waitForEvent('framenavigated', {
             predicate: f => f.name() === 'conteudo' && f.url().startsWith(origem + '/bin/rt/gAcordo.asp'),
@@ -55,6 +58,14 @@ export async function coletarManager(credenciais, visitar) {
           mudou.catch(() => {})
           await menu.locator('select[name=Conteudo]').selectOption({ label: 'Acordos Online' })
           const frame = await mudou
+          if (somenteAcordos) {
+            await frame.locator('select').filter({ has: frame.locator('option').filter({ hasText: /^todas(?: as)? unidades$/i }) })
+              .first().waitFor({ state: 'attached' })
+            filtro = await frame.locator('select').evaluateAll(controles => controles.map(s => {
+              const selecionar = [...s.options].map(x => x.textContent.trim())
+              return { campo: s.name, opcoes: selecionar.some(t => /^todas(?: as)? unidades$/i.test(t)) ? ['Todas as unidades'] : selecionar }
+            }))
+          }
           await filtrarWebware(frame)
           await frame.getByText(/Total Geral|Não há acordos registrados/i).first().waitFor({ timeout: 75_000 })
           const paginador = frame.locator('select[name=page]')
@@ -103,7 +114,7 @@ export async function coletarManager(credenciais, visitar) {
             }
           })
         })
-        return { cotas, acordos }
+        return somenteAcordos ? { acordos, filtro } : { cotas, acordos }
       })
     }
   } finally {
