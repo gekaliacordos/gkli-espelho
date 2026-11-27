@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       max-parallel: 3
       matrix:
-        alvo: [bbz-1158, bbz-1207, bbz-1220, bbz-1341, bbz-1532, bbz-1679, bbz-1680, bbz-1681, bbz-1682, bbz-1683, bbz-1792, bbz-1837, bbz-1838, bbz-1839, bbz-1841, bbz-1842, bbz-1843, bbz-1844, bbz-1880, bbz-650, bbz-728, bbz-820]
+        alvo: [bbz-1869]
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
