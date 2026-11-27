@@ -10,11 +10,12 @@ try {
   const links=await pagina.locator('a[href*="changeCondominioPadrao/id/"]').evaluateAll(es=>es.map(e=>({nome:e.innerText.trim(),rota:e.pathname,origem:e.origin})))
   dados.totalVinculos=new Set(links.map(x=>x.rota)).size
   dados.vinculosAtmosfera=links.some(x=>norm(x.nome).includes('ATMOSFERA'))
+  dados.rotulosAtmosfera=[...new Set(links.filter(x=>norm(x.nome).includes('ATMOSFERA')).map(x=>norm(x.nome.split('\n')[0]).split(/[@|:]/)[0].replace(/\d{4,}/g,'').slice(0,65)))]
   dados.condominios=[]
-  for(const alvo of ['VISO MOEMA','ATMOSFERA RESIDENCIAL','ATMOSFERA STUDIOS']){
+  for(const alvo of ['ATMOSFERA RESIDENCIAL','ATMOSFERA STUDIOS']){
    const info={alvo}
    dados.condominios.push(info)
-   const achados=links.filter(x=>x.origem===origem&&/^\/intra\/default\/changeCondominioPadrao\/id\/\d+$/.test(x.rota)&&norm(x.nome).includes(alvo))
+   const achados=links.filter(x=>x.origem===origem&&/^\/intra\/default\/changeCondominioPadrao\/id\/\d+$/.test(x.rota)&&alvo.split(' ').every(palavra=>norm(x.nome).includes(palavra)))
    const rotas=[...new Set(achados.map(x=>x.rota))]
    if(rotas.length!==1){info.acesso=rotas.length?'Ambíguo':'Vínculo ausente';continue}
    info.acesso='Localizado'
