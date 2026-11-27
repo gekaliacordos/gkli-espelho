@@ -37,7 +37,7 @@ try {
     if(candidatos.length===1){
       const atual=pagina.context().pages()
       await financeiro.getByText(candidatos[0],{exact:true}).first().click({timeout:6000})
-      const limite=Date.now()+38000
+      const limite=Date.now()+175000
       let melhor
       while(Date.now()<limite){
        const destinos=[...pagina.context().pages().filter(x=>!atual.includes(x)),pagina]
@@ -46,8 +46,8 @@ try {
         const rota=new URL(f.url()).pathname
         const t=await f.locator('body').innerText({timeout:2000}).catch(()=>'')
         if(t && (tab!==pagina || /acordo/i.test(rota))) {
-          if(!melhor || t.length>melhor.texto.length) melhor={rota,texto:t.slice(0,50000),nova:tab!==pagina}
-          if((/honor[aá]rios|valor do repasse|nenhum (?:acordo|registro)|liquida[cç][aã]o|vencimento/i.test(t)) && (!/carregando/i.test(t)||t.length>400)){
+          if(!melhor || (/processando a solicita/i.test(melhor.texto) && !/processando a solicita/i.test(t)) || t.length>melhor.texto.length) melhor={rota,texto:t.slice(0,50000),nova:tab!==pagina}
+          if((/honor[aá]rios|valor do repasse|nenhum (?:acordo|registro)|liquida[cç][aã]o|vencimento/i.test(t)) && !/(?:carregando|processando a solicita)/i.test(t)){
             info.relatorio=melhor
             return
           }
