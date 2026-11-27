@@ -1,6 +1,7 @@
 import { constants, createCipheriv, publicEncrypt, randomBytes } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { coletarWebwareNuvem } from './webware-nuvem.mjs'
+import { centavos, dataIso } from './condopro.mjs'
 import { lerAcordosWebware } from './webware-acordos.mjs'
 
 const alvo = 'bbz-1380'
@@ -62,6 +63,58 @@ async function consulta(page, abrir) {
   const linhas = paginas.flat().filter(r => ids.has(r.linha[0] + '/' + r.linha[1] + ':' + r.linha[2]))
     .map(r => ({ unidade: r.linha[0] + '/' + r.linha[1], numero: r.linha[2], principalExibido: r.linha[4], controles: r.controles }))
   capturas.push({ durante, ativos, linhas, situacoes: acordos.map(({unidade,numero,saldo,recebido,total})=>({unidade,numero,saldo,recebido,total})), pagina: new URL(page.url()).pathname })
+  const resultado = { vinculos: [], falhas: 0, unidades: 0 }
+  capturas.push(resultado)
+  await page.goto(new URL('/bin/aplic/u_2via.asp', page.url()).href, { waitUntil: 'domcontentloaded' })
+  const prazo = Date.now() + 22000
+  let frame
+  while (!frame && Date.now() < prazo) {
+    frame = page.frames().find(f => f.parentFrame() === page.mainFrame() && /^https:\/\/portalwm\.webware\.com\.br\/relatorioboleto\/boletosegundavianovo(?:[?#]|$)/i.test(f.url()))
+    if (!frame) await page.waitForTimeout(350)
+  }
+  if (!frame) throw Error('Lista de boletos indisponível')
+  const disponiveis = await frame.evaluate(async () => {
+    const r = await fetch('/relatorioboleto/unidades'); if (!r.ok) throw Error('Unidades indisponíveis')
+    return (await r.json()).Unidades
+  })
+  const normal = s => s.toUpperCase().replace(/^0+(?=\d)/,'')
+  const chaves = p => JSON.stringify([p.numero,p.vencimento,p.valor])
+  for (const unidade of new Set(ativos.map(a=>a.unidade))) {
+    try {
+      const [b,u]=unidade.split('/').map(normal)
+      const refs=disponiveis.filter(ref => {
+        if(typeof ref!=='string') return false
+        const [bl,t,un,...extra]=ref.split('/')
+        return !extra.length && t==='AP' && bl && un && normal(bl)===b && normal(un)===u
+      })
+      if(refs.length!==1) throw Error('Unidade divergente')
+      const ref=refs[0]
+      const lista=await frame.evaluate(async ref => {
+        const r=await fetch('/relatorioboleto/recibos?unidade='+encodeURIComponent(ref))
+        if(!r.ok) throw Error('Recibos indisponíveis')
+        const d=await r.json()
+        if(d.success!==true || d.unidade!==ref || !Array.isArray(d.Recibo)) throw Error('Lista divergente')
+        return d.Recibo.filter(x=>x.ReciboDeAcordo===true).map(x=>({
+          numero:x.numero, unidade:x.recibo_unidade, origem:x.Origem, parcela:x.parcela, vencimento:x.vencimento, valor:x.valor,
+          incerto:!!(x.ConsolidadoEmOutraUnidade||x.novadtvencimento),
+        }))
+      },ref)
+      resultado.unidades++
+      const boletos=lista.flatMap(x=>{
+        if(x.origem!=='2'||x.numero!==x.unidade||!/^\d{6,}$/.test(x.numero)||x.incerto) return []
+        try{return [{recibo:x.numero, chave:chaves({numero:x.parcela,vencimento:dataIso(x.vencimento),valor:centavos(x.valor)})}]}catch{return []}
+      })
+      const parcelas=acordos.filter(a=>a.unidade===unidade).flatMap(a=>a.parcelas.map(p=>({a,p,chave:chaves(p)})))
+      for(const {a,p,chave} of parcelas.filter(z=>z.a.saldo>0)){
+        const candidatos=boletos.filter(x=>x.chave===chave)
+        if(candidatos.length!==1 || parcelas.filter(x=>x.chave===chave).length!==1 ||
+          boletos.filter(x=>x.recibo===candidatos[0].recibo).length!==1) continue
+        resultado.vinculos.push({unidade,numero:a.numero,parcela:p.numero,vencimento:p.vencimento,valor:p.valor,recibo:candidatos[0].recibo})
+      }
+    } catch { resultado.falhas++ }
+    await page.waitForTimeout(350)
+  }
+  console.log('Recibos com vínculo único:',resultado.vinculos.length,'Unidades consultadas:',resultado.unidades)
   console.log('Grade conferida:', acordos.length, 'registros;', ativos.length, 'com saldo em aberto.')
 }
 try {
