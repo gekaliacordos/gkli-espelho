@@ -1,4 +1,4 @@
-name: Reconsulta composição Lello
+name: Reconsulta por empresa no Acob
 on:
   push:
     branches: [codex/composicao-pontual-lello-20261126]
@@ -13,16 +13,20 @@ jobs:
       max-parallel: 2
       matrix:
         include:
-          - codigo: "1637"
-            intervalo: "0:3"
+          - codigo: "63004"
+            intervalo: "0:14"
+          - codigo: "63004"
+            intervalo: "14:28"
+          - codigo: "63004"
+            intervalo: "28:42"
+          - codigo: "63004"
+            intervalo: "42:55"
           - codigo: "62430"
             intervalo: "0:2"
           - codigo: "62751"
             intervalo: "0:6"
           - codigo: "62905"
             intervalo: "0:3"
-          - codigo: "63004"
-            intervalo: "0:1"
     runs-on: ubuntu-latest
     timeout-minutes: 22
     steps:

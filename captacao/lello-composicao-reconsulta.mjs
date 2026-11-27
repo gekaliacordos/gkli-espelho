@@ -106,7 +106,11 @@ async function coletar(pagina, contexto, acordos) {
     const escolhida = opcoes.find(o => o.nome === empresa);
     if (!escolhida) return { erro: 'Empresa não disponível no Acob', empresas: opcoes.map(o => o.nome) };
     await empresas.selectOption(escolhida.valor);
-    await form.locator('input[name=pre_codigo]').fill(condominio ? alvo.codigo : '');
+    await form.locator('input[name=pre_codigo]').evaluate((input, referencia) => {
+      input.value = referencia;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, condominio ? alvo.codigo : '');
     await form.locator('input[name=aco_recNum]').fill(acordo.numero);
     await form.locator('input[name=dev_codigo]').fill(unidade ? acordo.unidade : '');
     await form.locator('input[name=aco_dt_cria1]').fill('');
@@ -119,10 +123,8 @@ async function coletar(pagina, contexto, acordos) {
   }
 
   const fichas = [];
-  const padrao = 'LELLO CONDOMINIOS LTDA';
-  let metodos = [{ condominio: false, unidade: false, empresa: padrao },
-    { condominio: true, unidade: true, empresa: padrao },
-    { condominio: true, unidade: false, empresa: padrao }];
+  const historico = 'HUBERT IMOVEIS E ADM LTDA';
+  let metodos = [{ condominio: true, unidade: false, empresa: historico }];
   for (const [indice, acordo] of acordos.entries()) {
     let ficha = { erro: 'Acordo não localizado nas buscas do Acob' };
     let resultado;
@@ -136,10 +138,9 @@ async function coletar(pagina, contexto, acordos) {
       if (resultado.erro === 'Identidade do acordo não confirmada') ficha = resultado;
       if (resultado.transitorio) ficha = { erro: resultado.erro };
       if (resultado.empresas) {
-        const alternativas = resultado.empresas.filter(e => /lello/i.test(e));
-        if (alternativas.length === 1 && alternativas[0] !== metodo.empresa) {
-          metodos = [{ ...metodo, empresa: alternativas[0] }, ...metodos];
-        }
+        const erro = 'Empresa histórica indisponível no Acob';
+        fichas.push(...acordos.slice(indice).map(pendente => ({ ...pendente, erro })));
+        return fichas;
       }
       await pausa(250);
     }
@@ -189,7 +190,18 @@ try {
   const acordos = Number.isSafeInteger(inicio) && Number.isSafeInteger(fim) && inicio >= 0 && fim > inicio ?
     ativos.slice(inicio, fim) : ativos;
   console.log('Acordos selecionados:', acordos.length);
-  const perfil = JSON.parse(Buffer.from(process.env.ESPELHO_PORTAIS_B64, 'base64')).lello[alvo.perfil];
+  const perfis = JSON.parse(Buffer.from(process.env.ESPELHO_PORTAIS_B64, 'base64')).lello;
+  const perfil = perfis[alvo.perfil];
+  const mesmaConta = (a, b) => a?.usuario?.trim().toLowerCase() === b?.usuario?.trim().toLowerCase();
+  if (!perfil?.usuario || !perfil?.senha) throw Error('Perfil de acesso incompleto');
+  if (alvo.perfil === 'SAFIRA' && mesmaConta(perfil, perfis.PADRAO)) {
+    publicar({ codigo: alvo.codigo, condominio: alvo.nome, fichas: acordos.map(acordo => ({
+      ...acordo, erro: 'O perfil Safira está com o mesmo login do perfil padrão',
+    })) });
+    console.log('Perfil Safira requer conferência: login coincide com o perfil padrão.');
+    process.exit(0);
+  }
+  if (alvo.perfil === 'SAFIRA') console.log('Perfil Safira tem login distinto do perfil padrão.');
   let fichas;
   try {
     fichas = acordos.length ? await coletarEspelhoLello({ ...alvo, ...perfil }, AbortSignal.timeout(19 * 60000),
