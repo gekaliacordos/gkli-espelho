@@ -1,4 +1,4 @@
-name: Atualização pontual Hi View residencial
+name: Conferência pontual BBZ
 on:
   push:
     branches: [codex/bbz-recibos-pontuais]
@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       max-parallel: 3
       matrix:
-        alvo: [bbz-1869]
+        alvo: [bbz-1841]
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -23,8 +23,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install chrome
-      - run: node captacao/executar-nuvem.mjs bbz "$ALVO"
+      - run: node captacao/bbz-pontual.mjs "$ALVO"
         env:
           ALVO: ${{ matrix.alvo }}
           ESPELHO_PORTAIS_B64: ${{ secrets.ESPELHO_PORTAIS_V2 }}
-          ESPELHO_DATABASE_URL: ${{ secrets.ESPELHO_COLETORES_DATABASE_URL }}
+          PUBLIC_RESULT_KEY: LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQm9qQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FZOEFNSUlCaWdLQ0FZRUF4MENIcjBjNWdaNVJqbkJGb04xMAplSk4rQnUzS0IybWpnTVdmemFwZFlwbjI0amNwZnQ1QXlrWVRnODlaNEdVTW1tQ2ZIMHQydVN2R2NHdVdnMnNNClJCSDNMQkkwRG9sOU1iclYrM3h3ZUNqUUtGYkRzZ25xQjBqL3M4UzYxNnBYbDdzMU8vRjBSSjlEeXdYc2k4cUQKWC81Q3FDL3UrT1J4SU85eXlHMzVCTE93QmlhTFdmUEJ4ZHhjcC91SS9Bb1FsaWZYb2o3cHVoc0srOVR1SnErMwpmSWYvMmlrQTdJMjJzMzZXMEx3QXZ1RUdJWWlHSU5rMlJNWGxUZy9Va3dqUmYxT3ArTzZHUlZobVVNUFFmeXVLCkVnbVBiakRXL0lPaVY2UmFQMEZldDJ3cVJNMzJrN240SjJTTUJMTmE0UXM2eTFCTWdST1hYU0lTSnIrRE5qeGQKNVVCbHlyZ0FWaU45aE1lUHZyczhQN1VqcXUrVFptL2YySktmZ1kwRkNxL0Q0ZHBnTk1oQS9vdDNaN1J6NXlvcAowbzAwZU1HeG82eU1Oang5cUtEd0Mwc3BXNW9rNFhYMDhGNi9SNEw0ekt3YjJ1azE4MjhCNzF2Tmk4RXl3aEZ6ClVranBOcitxY3lPZ1o2eW1oUVREZ3FJVjl2czlNcDB3bHRkZCtBSEVnYytGQWdNQkFBRT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==
