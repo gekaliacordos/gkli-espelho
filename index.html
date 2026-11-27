@@ -1232,12 +1232,9 @@
         c.acordoOrigem ? "Acordo " + c.acordoOrigem : null, situacoesAcordos.get(c.acordoOrigem),
       ].filter(Boolean).join(" · ")));
       const conferencia = dados.conferenciaManager;
-      const ausentes = new Set(conferencia?.aplicada ? conferencia.fichas.filter(f => f.resultado === "ausente")
-        .map(f => JSON.stringify([f.unidade, f.numero])) : []);
       if (!dados.cobertura || dados.acordosCaptadosEm) listar(listas, "Acordos", dados.acordos.filter(a => corresponde(a.unidade)).map(a => {
         const linha = [
           a.unidade, "Acordo " + a.numero, a.situacao,
-          ausentes.has(JSON.stringify([a.unidade, String(a.numero)])) ? "Situação a confirmar no Atentum" : null,
           a.total == null ? null : moeda.format(a.total / 100),
           a.parcelas ? a.parcelas.length + " parcelas" : null, a.cotas ? a.cotas.length + " cotas vinculadas" : null,
           a.saldo == null ? null : (a.situacaoNaCaptacao ? "Saldo na captação " : "Saldo ") + moeda.format(a.saldo / 100),
@@ -1258,15 +1255,17 @@
       }));
       if (conferencia) {
         const dataConsulta = dataHora.format(new Date(conferencia.conferidoEm));
-        listar(listas, "Conferência no Atentum · " + dataConsulta,
-          conferencia.fichas.filter(f => corresponde(f.unidade)).map(mostrarFichaManager));
+        const fichas = conferencia.fichas.filter(f => corresponde(f.unidade));
+        listar(listas, "Conferência no Atentum · " + dataConsulta, fichas.filter(f => f.acordo).map(mostrarFichaManager));
+        const ausentes = fichas.filter(f => f.resultado === "ausente");
+        if (ausentes.length) listar(listas, "Histórico da conferência · " + dataConsulta, ausentes.map(mostrarFichaManager));
       }
     }
 
     function mostrarFichaManager(ficha) {
       const rotulo = ficha.unidade + " · Acordo " + ficha.numero;
       const acordo = ficha.acordo;
-      if (!acordo) return rotulo + " · Ausente na grade em aberto · Situação a confirmar";
+      if (!acordo) return rotulo + " · Ausente na grade em aberto";
 
       const detalhes = document.createElement("details");
       const titulo = document.createElement("summary");

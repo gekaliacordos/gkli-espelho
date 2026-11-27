@@ -40,17 +40,17 @@ create or replace function espelho_privado.aplicar_conferencia_manager(
         select acordo, ordem
         from jsonb_array_elements($3->'acordos') with ordinality as a(acordo, ordem)
       ), conferidos as (
-        select unidade, numero, acordo
-        from jsonb_to_recordset(f.fichas) as r(unidade text, numero text, acordo jsonb)
-        where acordo is not null
+        select unidade, numero, resultado, acordo
+        from jsonb_to_recordset(f.fichas) as r(unidade text, numero text, resultado text, acordo jsonb)
       ), atualizados as (
         select b.acordo || coalesce(c.acordo, '{}'::jsonb) as acordo, b.ordem
         from base b left join conferidos c
           on c.unidade = b.acordo->>'unidade' and c.numero = b.acordo->>'numero'
+        where c.resultado is distinct from 'ausente'
         union all
         select c.acordo, null::bigint
         from conferidos c
-        where not exists (
+        where c.acordo is not null and not exists (
           select 1 from base b where c.unidade = b.acordo->>'unidade' and c.numero = b.acordo->>'numero'
         )
       )
