@@ -21,7 +21,7 @@ async function encontrarFrame(pagina, condicao) {
   throw Error('Tela esperada da Manager não apareceu.')
 }
 
-export async function coletarManager(credenciais, visitar) {
+export async function coletarManager(credenciais, visitar, consulta) {
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
   const pagina = await browser.newPage({ acceptDownloads: true })
   pagina.setDefaultTimeout(30_000)
@@ -33,6 +33,7 @@ export async function coletarManager(credenciais, visitar) {
     await pagina.getByRole('button', { name: /^Entrar$/i }).click()
     await pagina.waitForURL(url => url.origin === origem)
     for (const alvo of alvosManager) {
+      if (consulta && !consulta.codigos.has(alvo.codigo)) continue
       await visitar('manager-' + alvo.codigo, alvo.nome, async etapa => {
         const cliente = await encontrarFrame(pagina, f => f.locator('input[name=c]').first().isVisible())
         await cliente.locator('input[name=c]').first().fill(alvo.codigo)
@@ -41,7 +42,8 @@ export async function coletarManager(credenciais, visitar) {
           if (!await f.locator('select[name=Conteudo]').isVisible()) return false
           return codigo((await f.locator('body').innerText()).match(/Ocorrências\s*\|\s*Usuários\s*\|\s*(\d+)\s*-/i)?.[1]) === alvo.codigo
         })
-        const cotas = await etapa('cotas', async () => {
+        const menus = consulta ? await consulta.lerMenu(pagina, menu) : null
+        const cotas = consulta ? null : await etapa('cotas', async () => {
           const frame = pagina.frame({ name: 'conteudo' })
           await frame.goto(origem + '/bin/rt/rtPendentes.asp?u=', { waitUntil: 'domcontentloaded' })
           await filtrarWebware(frame)
@@ -57,6 +59,7 @@ export async function coletarManager(credenciais, visitar) {
           const frame = await mudou
           await filtrarWebware(frame)
           await frame.getByText(/Total Geral|Não há acordos registrados/i).first().waitFor({ timeout: 75_000 })
+          if (consulta) menus.grade = await consulta.lerGrade(frame)
           const paginador = frame.locator('select[name=page]')
           const numeros = await paginador.locator('option').evaluateAll(es => es.map(e => e.value))
           if (numeros.length > 200 || new Set(numeros).size !== numeros.length) throw Error('Paginação da Manager inválida.')
@@ -103,7 +106,7 @@ export async function coletarManager(credenciais, visitar) {
             }
           })
         })
-        return { cotas, acordos }
+        return { cotas, acordos, menus }
       })
     }
   } finally {
