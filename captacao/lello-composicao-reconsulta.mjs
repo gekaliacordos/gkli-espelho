@@ -8,7 +8,7 @@ const origem = 'https://portal.lellocondominios.com.br';
 const buscaPath = '/acob/buscaAcordo.jsp';
 const acao = '/acob/servlet/BuscaAcordo';
 const alvo = alvosLello.find(item => item.codigo === process.argv[2]);
-const [inicio, fim] = String(process.argv[3] ?? '').split(':').map(Number);
+const selecao = String(process.argv[3] ?? '').split(',').filter(p => /^\d+$/.test(p)).map(Number);
 const pausa = ms => new Promise(resolve => setTimeout(resolve, ms));
 const normalizar = valor => String(valor ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
 const campos = {
@@ -124,7 +124,8 @@ async function coletar(pagina, contexto, acordos) {
 
   const fichas = [];
   const historico = 'HUBERT IMOVEIS E ADM LTDA';
-  let metodos = [{ condominio: true, unidade: false, empresa: historico }];
+  let metodos = [{ condominio: true, unidade: true, empresa: historico },
+    { condominio: false, unidade: false, empresa: historico }];
   for (const [indice, acordo] of acordos.entries()) {
     let ficha = { erro: 'Acordo não localizado nas buscas do Acob' };
     let resultado;
@@ -187,8 +188,10 @@ function publicar(payload) {
 try {
   if (!alvo) throw Error('Alvo indisponível');
   const ativos = await alvosAtivos();
-  const acordos = Number.isSafeInteger(inicio) && Number.isSafeInteger(fim) && inicio >= 0 && fim > inicio ?
-    ativos.slice(inicio, fim) : ativos;
+  if (!selecao.length || new Set(selecao).size !== selecao.length || selecao.some(i => !ativos[i])) {
+    throw Error('Seleção de reconsulta indisponível');
+  }
+  const acordos = selecao.map(i => ativos[i]);
   console.log('Acordos selecionados:', acordos.length);
   const perfis = JSON.parse(Buffer.from(process.env.ESPELHO_PORTAIS_B64, 'base64')).lello;
   const perfil = perfis[alvo.perfil];
