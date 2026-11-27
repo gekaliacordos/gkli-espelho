@@ -78,6 +78,7 @@ async function coletar(pagina, contexto, acordos) {
   }
   async function abrirBusca() {
     for (let i = 0; i < 40; i++) {
+      if (acob.isClosed()) throw Error('Busca do Acob indisponível');
       const nav = acob.frames().find(frame => frame.url().startsWith(origem + '/acob/NAV.jsp'));
       const busca = nav?.getByText(/^Busca Acordos$/i, { exact: true });
       if (await busca?.count() === 1) {

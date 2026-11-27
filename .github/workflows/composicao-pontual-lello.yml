@@ -13,6 +13,8 @@ jobs:
       max-parallel: 2
       matrix:
         include:
+          - codigo: "1637"
+            intervalo: "0:3"
           - codigo: "62430"
             intervalo: "0:2"
           - codigo: "62751"
