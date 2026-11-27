@@ -1,0 +1,23 @@
+name: Consulta de acordos OMA
+on:
+  push:
+    branches: [codex/oma-acordos-pontual]
+permissions:
+  contents: read
+concurrency:
+  group: captar-portal-oma
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chrome
+      - run: node captacao/oma-acordos-pontual.mjs
+        env:
+          ESPELHO_PORTAIS_B64: ${{ secrets.ESPELHO_PORTAIS_V2 }}

@@ -48,7 +48,7 @@ function lerInadimplencia(texto) {
   return { cotas, unidades, contatos: [] }
 }
 
-export async function coletarOma(credenciais, visitar) {
+export async function coletarOma(credenciais, visitar, consultaPontual) {
   await visitar('oma-22785', 'Viso Moema', async etapa => {
     const cotas = await etapa('cotas', async () => {
       const browser = await chromium.launch({ channel: 'chrome', headless: true })
@@ -62,6 +62,7 @@ export async function coletarOma(credenciais, visitar) {
         await form.locator('input[name="LoginForm[password]"]').fill(credenciais.senha)
         await form.locator('button[type=submit]').click()
         await pagina.waitForURL(u => u.origin === origem && u.pathname.endsWith('/escolherPortal'))
+        if (consultaPontual) return await consultaPontual(pagina)
         fase = 'seleção de Viso Moema'
         const vinculos = pagina.locator('a[href*="changeCondominioPadrao/id/22785"]')
         await vinculos.first().waitFor({ state: 'attached' })
