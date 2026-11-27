@@ -115,7 +115,7 @@ function conciliar(cotas, acordos) {
 
 const tokenHabita = texto => texto.match(/paravoce@habita\.com\.br[\s\S]{0,1200}?concluir o login:\s*(\d{4,8})/i)?.[1]
 
-export async function coletarHabitacional(credenciais, visitar) {
+export async function coletarHabitacional(credenciais, visitar, inspecionar) {
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
   const caixa = await browser.newPage(), pagina = await browser.newPage()
   let etapa = 'abertura do Outlook'
@@ -167,7 +167,7 @@ export async function coletarHabitacional(credenciais, visitar) {
         await pagina.getByText(alvo[1] + ' - Advogado', { exact: false }).click()
         await avancar.click()
         await pagina.getByText(alvo[1], { exact: true }).first().waitFor()
-        const relatorio = async rota => {
+        const relatorioPdf = async rota => {
           await pagina.goto(origem + '/parceiro/' + rota + '/index', { waitUntil: 'domcontentloaded' })
           await pagina.getByText('Todas as unidades', { exact: true }).click()
           const recebimento = pagina.context().waitForEvent('response', {
@@ -178,8 +178,17 @@ export async function coletarHabitacional(credenciais, visitar) {
           await pagina.getByText('Processar', { exact: true }).click()
           const bytes = await (await recebimento).body()
           if (bytes.subarray(0, 5).toString() !== '%PDF-') throw Error('Exportação não é PDF.')
-          return (await parsePdf(bytes)).text
+          return bytes
         }
+        if (inspecionar) {
+          const menus = await pagina.locator('a[href]').evaluateAll(links => links.map(el => ({
+            nome: (el.innerText || el.getAttribute('title') || '').trim().replace(/\s+/g,' ').slice(0,100),
+            caminho: el.origin === location.origin ? el.pathname : null,
+          })).filter(x => x.caminho && /acordo|baixa|pagament|relat|financeir/i.test(x.nome)).slice(0,40))
+          return inspecionar(alvo, await relatorioPdf('AcordosAndamento'), menus)
+        }
+        const relatorio = async rota => (await parsePdf(await relatorioPdf(rota))).text
+
         const cotas = await etapa('cotas', async () => lerCotas(await relatorio('InadimplenciaAtualizada'), alvo))
         const acordos = await etapa('acordos', async () => lerAcordos(await relatorio('AcordosAndamento'), alvo))
         // A conciliação depende das duas fontes da mesma coleta.
