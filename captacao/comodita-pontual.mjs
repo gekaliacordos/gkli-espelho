@@ -21,12 +21,13 @@ async function menu(page) {
     const lista = await frame.locator('a,button,[onclick]').evaluateAll(els => els.map(el => ({
       nome: (el.innerText || el.title || el.getAttribute('aria-label') || '').trim().slice(0,160),
       href: el.getAttribute('href'), acao: el.getAttribute('onclick'),
-    })).filter(el => el.nome && /acord|negoci|recibo|finance|cobran|extrato|relat|demonstr|composi/i.test(el.nome))).catch(() => [])
+    })).filter(el => el.nome && /acord|negoci|recibo|finance|cobran|extrato|relat|demonstr|composi|hist[oó]r|pagament|via|boleto|pend.n|prest|document/i.test(el.nome))).catch(() => [])
     menus.push(...lista)
   }
   return menus
 }
 async function consulta(page, abrir) {
+  await page.locator('a[href="/bin/rt/gAcordo.asp"]').first().waitFor({state:'attached',timeout:15000}).catch(() => {})
   const antes = await menu(page)
   capturas.push({ antes })
   await abrir()
@@ -60,7 +61,7 @@ async function consulta(page, abrir) {
   const ids = new Set(ativos.map(a => a.unidade + ':' + a.numero))
   const linhas = paginas.flat().filter(r => ids.has(r.linha[0] + '/' + r.linha[1] + ':' + r.linha[2]))
     .map(r => ({ unidade: r.linha[0] + '/' + r.linha[1], numero: r.linha[2], principalExibido: r.linha[4], controles: r.controles }))
-  capturas.push({ durante, ativos, linhas, pagina: new URL(page.url()).pathname })
+  capturas.push({ durante, ativos, linhas, situacoes: acordos.map(({unidade,numero,saldo,recebido,total})=>({unidade,numero,saldo,recebido,total})), pagina: new URL(page.url()).pathname })
   console.log('Grade conferida:', acordos.length, 'registros;', ativos.length, 'com saldo em aberto.')
 }
 try {
