@@ -77,7 +77,7 @@ export async function lerGradeWebware(pagina) {
   return lerAcordosWebware(paginas)
 }
 
-export async function coletarWebwareNuvem(portal, credenciais, visitar) {
+export async function coletarWebwareNuvem(portal, credenciais, visitar, consultaPontual) {
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
   const pagina = await browser.newPage({ acceptDownloads: true })
   pagina.setDefaultTimeout(30_000)
@@ -115,6 +115,7 @@ export async function coletarWebwareNuvem(portal, credenciais, visitar) {
             throw Error('Condomínio do resultado divergente.')
           }
         }
+        if (consultaPontual) return consultaPontual(pagina, () => abrir('/bin/rt/gAcordo.asp'))
         const cotas = await etapa('cotas', async () => {
           await abrir('/bin/rt/rtPendentes.asp')
           return lerCotasWebware(pagina, titulo)
