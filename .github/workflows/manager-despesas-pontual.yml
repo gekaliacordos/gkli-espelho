@@ -10,8 +10,9 @@ jobs:
   verificar:
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
-        codigos: ["2262,2272,567", "115,519,580,582"]
+        codigos: ["2262"]
     runs-on: ubuntu-latest
     timeout-minutes: 9
     steps:

@@ -26,23 +26,51 @@ export async function coletarManager(credenciais, visitar, consulta) {
   const pagina = await browser.newPage({ acceptDownloads: true })
   pagina.setDefaultTimeout(30_000)
   try {
-    await pagina.goto(portal, { waitUntil: 'domcontentloaded' })
-    if (new URL(pagina.url()).origin !== new URL(portal).origin) throw Error('Origem do login divergente.')
-    await pagina.locator('input[type=text]:visible').first().fill(credenciais.usuario)
-    await pagina.locator('input[type=password]:visible').first().fill(credenciais.senha)
-    await pagina.getByRole('button', { name: /^Entrar$/i }).click()
-    await pagina.waitForURL(url => url.origin === origem)
+    let fase = 'abrir página de acesso'
+    try {
+      await pagina.goto(portal, { waitUntil: 'domcontentloaded' })
+      if (new URL(pagina.url()).origin !== new URL(portal).origin) throw Error('Origem do login divergente.')
+      fase = 'localizar formulário'
+      const usuario = pagina.locator('input[name=mem]:visible')
+      const senha = pagina.locator('input[name=pass]:visible')
+      await usuario.fill(credenciais.usuario)
+      await senha.fill(credenciais.senha)
+      fase = 'enviar formulário'
+      const destino = await senha.evaluate(el => new URL(el.form.action).origin)
+      if (destino !== 'https://www.webware.com.br') throw Error('Destino de autenticação divergente.')
+      await pagina.getByRole('button', { name: /^Entrar$/i }).click({ noWaitAfter: true })
+      fase = 'confirmar sessão Atentum'
+      await pagina.waitForURL(url => url.origin === origem, {timeout: 50000, waitUntil: 'domcontentloaded'})
+    } catch (error) {
+      if (consulta) {
+        const atual = new URL(pagina.url())
+        const texto = await pagina.locator('body').innerText({timeout:2000}).catch(()=> '')
+        const resposta = /usu[aá]rio ou senha|senha inv[aá]lid|credencia[il].{0,24}inv[aá]lid/i.test(texto) ? 'credencial recusada'
+          : /sess[aã]o.{0,20}(expirad|inv[aá]lid)|timeout/i.test(texto) ? 'sessão indisponível'
+          : /captcha|verific[aç][aã]o de seguran[cç]a/i.test(texto) ? 'verificação adicional'
+          : /acesso negado|bloqueado|temporariamente|indispon[ií]vel/i.test(texto) ? 'portal recusou acesso'
+          : 'sem confirmação'
+        console.log('Acesso Manager:',fase,'·',resposta,'·',
+          [new URL(portal).origin,'https://www.webware.com.br',origem].includes(atual.origin) ? atual.origin : 'fora da origem conhecida')
+      }
+      throw error
+    }
     for (const alvo of alvosManager) {
       if (consulta && !consulta.codigos.has(alvo.codigo)) continue
       await visitar('manager-' + alvo.codigo, alvo.nome, async etapa => {
+        consulta?.etapa('Localizar seleção de condomínio')
         const cliente = await encontrarFrame(pagina, f => f.locator('input[name=c]').first().isVisible())
         await cliente.locator('input[name=c]').first().fill(alvo.codigo)
+        consulta?.etapa('Abrir condomínio')
         await cliente.locator('input[name=acao][type=submit]').first().click()
+        consulta?.etapa('Confirmar menu do condomínio')
         const menu = await encontrarFrame(pagina, async f => {
           if (!await f.locator('select[name=Conteudo]').isVisible()) return false
           return codigo((await f.locator('body').innerText()).match(/Ocorrências\s*\|\s*Usuários\s*\|\s*(\d+)\s*-/i)?.[1]) === alvo.codigo
         })
+        consulta?.etapa('Ler menu do condomínio')
         const menus = consulta ? await consulta.lerMenu(pagina, menu) : null
+        if (consulta) consulta.parcial(menus)
         const cotas = consulta ? null : await etapa('cotas', async () => {
           const frame = pagina.frame({ name: 'conteudo' })
           await frame.goto(origem + '/bin/rt/rtPendentes.asp?u=', { waitUntil: 'domcontentloaded' })
@@ -51,15 +79,20 @@ export async function coletarManager(credenciais, visitar, consulta) {
           return lerCotasWebware(frame, titulo.replace(/^.*?Condom[ií]nio:\s*\d+\s*-\s*/i, '').trim())
         })
         const acordos = await etapa('acordos', async () => {
+          consulta?.etapa('Abrir Acordos Online')
           const mudou = pagina.waitForEvent('framenavigated', {
             predicate: f => f.name() === 'conteudo' && f.url().startsWith(origem + '/bin/rt/gAcordo.asp'),
           })
           mudou.catch(() => {})
           await menu.locator('select[name=Conteudo]').selectOption({ label: 'Acordos Online' })
+          consulta?.etapa('Aguardar tela de acordos')
           const frame = await mudou
+          consulta?.etapa('Filtrar todas as unidades')
           await filtrarWebware(frame)
           await frame.getByText(/Total Geral|Não há acordos registrados/i).first().waitFor({ timeout: 75_000 })
+          consulta?.etapa('Ler estrutura da grade')
           if (consulta) menus.grade = await consulta.lerGrade(frame)
+          consulta?.etapa('Ler acordos e pagamentos')
           const paginador = frame.locator('select[name=page]')
           const numeros = await paginador.locator('option').evaluateAll(es => es.map(e => e.value))
           if (numeros.length > 200 || new Set(numeros).size !== numeros.length) throw Error('Paginação da Manager inválida.')

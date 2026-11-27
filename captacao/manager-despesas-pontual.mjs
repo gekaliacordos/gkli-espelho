@@ -49,7 +49,11 @@ function publicar(dados) {
 try {
   const credenciais = JSON.parse(Buffer.from(process.env.ESPELHO_PORTAIS_B64,'base64')).manager;
   const relatorios = [];
+  let etapa;
+  let menusParciais;
   await coletarManager(credenciais, async (codigo, nome, executar) => {
+    etapa = null;
+    menusParciais = null;
     try {
       const { acordos, menus } = await executar((_etapa, operacao) => operacao());
       relatorios.push({ codigo, nome, ativos: acordos.filter(a => a.saldo > 0).length, menus,
@@ -58,11 +62,15 @@ try {
             .map(p => ({ unidade, acordo: numero, ...p }))),
       });
       console.log('Grade consultada.');
-    } catch {
-      relatorios.push({ codigo, nome, erro: 'Consulta da grade indisponível' });
-      console.log('Grade indisponível em um alvo.');
+    } catch (erro) {
+      const tipo = erro?.name === 'TimeoutError' ? 'tempo de espera' : 'estrutura ou resposta divergente';
+      relatorios.push({ codigo, nome, erro: 'Consulta da grade indisponível', etapa, tipo, menus: menusParciais });
+      console.log('Grade indisponível:', etapa, '·', tipo);
     }
-  }, { codigos, lerMenu, lerGrade });
+  }, { codigos, lerMenu, lerGrade,
+    etapa(nova) { etapa = nova; },
+    parcial(menus) { menusParciais = menus; },
+  });
   publicar(relatorios);
   console.log('Consulta encerrada.');
 } catch {
