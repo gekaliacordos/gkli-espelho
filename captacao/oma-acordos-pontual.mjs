@@ -15,7 +15,7 @@ try {
   for(const alvo of ['ATMOSFERA RESIDENCIAL','ATMOSFERA STUDIOS']){
    const info={alvo}
    dados.condominios.push(info)
-   const achados=links.filter(x=>x.origem===origem&&/^\/intra\/default\/changeCondominioPadrao\/id\/\d+$/.test(x.rota)&&alvo.split(' ').every(palavra=>norm(x.nome).includes(palavra)))
+   const achados=links.filter(x=>x.origem===origem&&/^\/intra\/default\/changeCondominioPadrao\/id\/\d+$/.test(x.rota)&&norm(x.nome).includes('CYRELA ATMOSFERA 360') && (norm(x.nome).includes('STUDIO') === alvo.endsWith('STUDIOS')))
    const rotas=[...new Set(achados.map(x=>x.rota))]
    if(rotas.length!==1){info.acesso=rotas.length?'Ambíguo':'Vínculo ausente';continue}
    info.acesso='Localizado'
