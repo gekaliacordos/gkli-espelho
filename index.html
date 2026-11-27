@@ -1238,9 +1238,15 @@
           a.periodoNegociado ? "Período negociado " + dataCurta(a.periodoNegociado.inicio) + " a " + dataCurta(a.periodoNegociado.fim) : null,
           a.cotasAbertasNoPeriodo?.length ? "Recibos em aberto no período (a conferir) " + a.cotasAbertasNoPeriodo.map(cota => cota.recibo).join(", ") : null,
         ].filter(Boolean).join(" · ");
-        if (!a.composicaoFinanceira) return linha;
+        const recibos = (a.parcelas ?? []).filter(parcela => parcela.recibo);
+        if (!a.composicaoFinanceira && !recibos.length) return linha;
         const acordo = document.createDocumentFragment();
-        acordo.append(linha, mostrarComposicaoFinanceira(a.composicaoFinanceira));
+        acordo.append(linha);
+        if (a.composicaoFinanceira) acordo.append(mostrarComposicaoFinanceira(a.composicaoFinanceira));
+        if (recibos.length) listar(acordo, "Recibos das parcelas", recibos.map(parcela =>
+          ["Parcela " + parcela.numero, "Recibo " + parcela.recibo, dataCurta(parcela.vencimento),
+            moeda.format(parcela.valor / 100)].join(" · ")
+        ));
         return acordo;
       }));
     }
