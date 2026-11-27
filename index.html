@@ -1189,6 +1189,7 @@
               ...dados.unidades, ...dados.cotas.map(cota => cota.unidade),
               ...dados.acordos.map(acordo => acordo.unidade), ...dados.contatos.map(contato => contato.unidade),
               ...(dados.conferenciaManager?.fichas ?? []).map(ficha => ficha.unidade),
+              ...(dados.conferenciaAtipass?.ausentes ?? []).map(acordo => acordo.unidade),
             ].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
             opcoesConsulta(unidade.corpo, [["todas", "Todas as unidades"], ...unidadeIds.map(id => ["unidade:" + id, id])]);
             unidade.corpo.value = "todas";
@@ -1243,10 +1244,12 @@
           a.cotasAbertasNoPeriodo?.length ? "Recibos em aberto no período (a conferir) " + a.cotasAbertasNoPeriodo.map(cota => cota.recibo).join(", ") : null,
         ].filter(Boolean).join(" · ");
         const recibos = (a.parcelas ?? []).filter(parcela => parcela.recibo);
-        if (!a.composicaoFinanceira && !recibos.length) return linha;
+        const detalheAtipass = dados.conferenciaAtipass?.aplicada || Object.hasOwn(a, "percentualQuitadoPortal");
+        if (!a.composicaoFinanceira && !recibos.length && !detalheAtipass) return linha;
         const acordo = document.createDocumentFragment();
         acordo.append(linha);
         if (a.composicaoFinanceira) acordo.append(mostrarComposicaoFinanceira(a.composicaoFinanceira));
+        if (detalheAtipass) acordo.append(mostrarFichaAcordo(a, "Detalhamento da grade"));
         if (recibos.length) listar(acordo, "Recibos das parcelas", recibos.map(parcela =>
           ["Parcela " + parcela.numero, "Recibo " + parcela.recibo, dataCurta(parcela.vencimento),
             moeda.format(parcela.valor / 100)].join(" · ")
@@ -1260,6 +1263,15 @@
         const ausentes = fichas.filter(f => f.resultado === "ausente");
         if (ausentes.length) listar(listas, "Histórico da conferência · " + dataConsulta, ausentes.map(mostrarFichaManager));
       }
+      if (dados.conferenciaAtipass) {
+        const { ausentes, conferidoEm } = dados.conferenciaAtipass;
+        const historico = ausentes.filter(a => corresponde(a.unidade));
+        if (historico.length) listar(listas, "Histórico Atipass · " + dataHora.format(new Date(conferidoEm)),
+          historico.map(a => mostrarFichaAcordo(a,
+            [a.unidade, "Acordo " + a.numero, "Ausente na grade", a.situacao].filter(Boolean).join(" · ")
+          ))
+        );
+      }
     }
 
     function mostrarFichaManager(ficha) {
@@ -1267,9 +1279,24 @@
       const acordo = ficha.acordo;
       if (!acordo) return rotulo + " · Ausente na grade em aberto";
 
+      return mostrarFichaAcordo(acordo, rotulo + " · " + acordo.situacao);
+    }
+
+    function mostrarFichaAcordo(acordo, rotulo) {
       const detalhes = document.createElement("details");
       const titulo = document.createElement("summary");
-      titulo.textContent = rotulo + " · " + acordo.situacao;
+      titulo.textContent = rotulo;
+      detalhes.append(titulo);
+      function mostrarValores() {
+        if (!detalhes.open) return;
+        detalhes.removeEventListener("toggle", mostrarValores);
+        preencherFichaAcordo(detalhes, acordo);
+      }
+      detalhes.addEventListener("toggle", mostrarValores);
+      return detalhes;
+    }
+
+    function preencherFichaAcordo(detalhes, acordo) {
       const valores = document.createElement("dl");
       valores.className = "catalog-record";
       for (const [chave, rotuloCampo] of [
@@ -1281,13 +1308,19 @@
         valor.textContent = Number.isSafeInteger(acordo[chave]) ? moeda.format(acordo[chave] / 100) : "Não informado";
         valores.append(termo, valor);
       }
-      detalhes.append(titulo, valores);
-      listar(detalhes, "Parcelas da consulta", acordo.parcelas.map(p => [
+      if (acordo.percentualQuitadoPortal) {
+        const termo = document.createElement("dt");
+        termo.textContent = "% quitado no portal";
+        const valor = document.createElement("dd");
+        valor.textContent = acordo.percentualQuitadoPortal;
+        valores.append(termo, valor);
+      }
+      detalhes.append(valores);
+      if (acordo.parcelas?.length) listar(detalhes, "Parcelas da consulta", acordo.parcelas.map(p => [
         "Parcela " + p.numero, "Vencimento " + dataCurta(p.vencimento), moeda.format(p.valor / 100),
         p.pagamento ? "Recebimento " + dataCurta(p.pagamento) : null,
-        p.recebido ? "Recebido " + moeda.format(p.recebido / 100) : null,
+        Number.isSafeInteger(p.recebido) ? "Recebido " + moeda.format(p.recebido / 100) : null,
       ].filter(Boolean).join(" · ")));
-      return detalhes;
     }
 
     function mostrarComposicaoFinanceira(composicao) {

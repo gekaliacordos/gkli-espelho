@@ -10,7 +10,7 @@ function valorOpcional(valor) {
   return valor ? centavos(valor) : null
 }
 
-export function lerAcordosWebware(paginas) {
+export function lerAcordosWebware(paginas, { incluirDetalhes = false } = {}) {
   const acordos = new Map()
   const hashes = new Set()
   for (const { linhas } of paginas) {
@@ -33,6 +33,7 @@ export function lerAcordosWebware(paginas) {
         atual.total = centavos(linha[1])
         atual.recebido = valorOpcional(linha[3])
         atual.saldo = valorOpcional(linha[4])
+        if (incluirDetalhes) atual.percentualQuitadoPortal = linha[5] || null
         atual.situacao = atual.saldo === null ? 'Saldo não informado'
           : atual.saldo > 0 ? 'Com saldo em aberto' : atual.saldo === 0 ? 'Saldo zerado' : 'Saldo credor'
         if (atual.parcelas.reduce((soma, parcela) => soma + parcela.valor, 0) !== atual.total
@@ -55,6 +56,7 @@ export function lerAcordosWebware(paginas) {
           if (inicio > fim) throw new Error('Período negociado invertido.')
           atual = { unidade: linha[0] + '/' + linha[1], numero: linha[2], parcelas: [], cotas: null,
             periodoNegociado: { inicio, fim } }
+          if (incluirDetalhes) atual.principal = valorOpcional(linha[4])
           campos = linha.slice(5, 10)
         } else if (atual && linha.length === 8 && !linha[0]) {
           campos = linha.slice(1, 6)
@@ -115,6 +117,6 @@ export async function coletarAcordosWebware(portal, acesso) {
         [...tabela.querySelectorAll('tr')].map(linha => [...linha.cells].map(celula => celula.innerText.trim())))
       paginas.push({ numero, linhas })
     }
-    return lerAcordosWebware(paginas)
+    return lerAcordosWebware(paginas, { incluirDetalhes: portal === 'atipass' })
   })
 }
