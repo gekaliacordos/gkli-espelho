@@ -1,0 +1,25 @@
+name: Campos financeiros HFlex
+on:
+  push:
+    branches: [codex/hflex-campos-pontual]
+permissions:
+  contents: read
+concurrency:
+  group: captar-hflex-rio-negro
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chrome
+      - run: node captacao/hflex-campos.mjs
+        env:
+          ESPELHO_PORTAL_USUARIO: ${{ secrets.AGENTE_HFLEX_USUARIO }}
+          ESPELHO_PORTAL_SENHA: ${{ secrets.AGENTE_HFLEX_SENHA }}
+          ALVOS_HFLEX: '[{"codigoPortal":"0290","nomePortal":"COND. ESCRITORIOS RIO NEGRO","bloco":"RIO NEGRO"},{"codigoPortal":"5987","nomePortal":"SUBCONDOMINIO EDIFICIO OFFICE TAMBORE","bloco":"OFFICE"}]'

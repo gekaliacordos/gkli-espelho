@@ -129,7 +129,7 @@ async function configurarAcordos(page, alvo) {
   await page.locator('#body_ckExibeAcordoContrato').check()
 }
 
-export async function baixarRelatoriosHflex({ usuario, senha }, caminhos, alvo, progresso = () => {}) {
+export async function baixarRelatoriosHflex({ usuario, senha }, caminhos, alvo, progresso = () => {}, somenteConsulta) {
   if (!usuario || !senha) throw Error('Credenciais do HFlex ausentes.')
   const browser = await chromium.launch({ channel: 'chrome', headless: true })
   try {
@@ -150,6 +150,7 @@ export async function baixarRelatoriosHflex({ usuario, senha }, caminhos, alvo, 
     progresso('relatórios de acordos')
     await selecionarEmpreendimento(page, alvo)
     await configurarAcordos(page, alvo)
+    if (somenteConsulta) return await somenteConsulta(page)
     progresso('XLS de acordos')
     await exportarXls(page, '#body_btRelatorioSintetico', caminhos.sintetico, /RelatorioAcordoSintetico/i, /RELATÓRIO DE ACORDOS\s*-\s*SINTÉTICO/i, alvo)
     progresso('relatório de devedores')
