@@ -1241,6 +1241,7 @@
           a.total == null ? null : moeda.format(a.total / 100),
           a.parcelas ? a.parcelas.length + " parcelas" : null, a.cotas ? a.cotas.length + " cotas vinculadas" : null,
           a.saldo == null ? null : (a.situacaoNaCaptacao ? "Saldo na captação " : "Saldo ") + moeda.format(a.saldo / 100),
+          Number.isSafeInteger(a.honorariosCobranca) ? "Honorários de cobrança " + moeda.format(a.honorariosCobranca / 100) : null,
           a.periodoNegociado ? "Período negociado " + dataCurta(a.periodoNegociado.inicio) + " a " + dataCurta(a.periodoNegociado.fim) : null,
           a.cotasAbertasNoPeriodo?.length ? "Recibos em aberto no período (a conferir) " + a.cotasAbertasNoPeriodo.map(cota => cota.recibo).join(", ") : null,
         ].filter(Boolean).join(" · ");
